@@ -376,6 +376,153 @@ static int db_init(void) {
         "  FOREIGN KEY(operator_user_id) REFERENCES users(id)"
         ");"
 
+        "CREATE TABLE IF NOT EXISTS machines ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  machine_code TEXT NOT NULL UNIQUE,"
+        "  location TEXT NOT NULL,"
+        "  status TEXT NOT NULL DEFAULT 'online' CHECK(status IN ('online','offline','downtime')),"
+        "  door_error INTEGER NOT NULL DEFAULT 0 CHECK(door_error IN (0,1)),"
+        "  temp_celsius REAL NOT NULL DEFAULT 4.0,"
+        "  temp_alert INTEGER NOT NULL DEFAULT 0 CHECK(temp_alert IN (0,1)),"
+        "  temp_min REAL NOT NULL DEFAULT 0.0,"
+        "  temp_max REAL NOT NULL DEFAULT 8.0,"
+        "  estimated_hourly_sales_cents INTEGER NOT NULL DEFAULT 0,"
+        "  priority_weight INTEGER NOT NULL DEFAULT 50 CHECK(priority_weight BETWEEN 0 AND 100),"
+        "  note TEXT,"
+        "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS machine_stock ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  machine_id INTEGER NOT NULL,"
+        "  product_id INTEGER NOT NULL,"
+        "  stock_quantity INTEGER NOT NULL DEFAULT 0 CHECK(stock_quantity >= 0),"
+        "  capacity INTEGER NOT NULL DEFAULT 50 CHECK(capacity > 0),"
+        "  restock_threshold INTEGER NOT NULL DEFAULT 10 CHECK(restock_threshold >= 0),"
+        "  last_restock_at TEXT,"
+        "  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  FOREIGN KEY(machine_id) REFERENCES machines(id) ON DELETE CASCADE,"
+        "  FOREIGN KEY(product_id) REFERENCES products(id),"
+        "  UNIQUE(machine_id, product_id)"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS machine_sales ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  machine_id INTEGER NOT NULL,"
+        "  product_id INTEGER NOT NULL,"
+        "  quantity INTEGER NOT NULL CHECK(quantity > 0),"
+        "  unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents >= 0),"
+        "  total_amount_cents INTEGER NOT NULL CHECK(total_amount_cents >= 0),"
+        "  payment_method TEXT NOT NULL CHECK(payment_method IN ('cash','scan','other')),"
+        "  note TEXT,"
+        "  operator_user_id INTEGER,"
+        "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  FOREIGN KEY(machine_id) REFERENCES machines(id),"
+        "  FOREIGN KEY(product_id) REFERENCES products(id),"
+        "  FOREIGN KEY(operator_user_id) REFERENCES users(id)"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS machine_downtime ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  machine_id INTEGER NOT NULL,"
+        "  start_time TEXT NOT NULL,"
+        "  end_time TEXT,"
+        "  duration_minutes INTEGER,"
+        "  reason TEXT NOT NULL,"
+        "  estimated_loss_cents INTEGER NOT NULL DEFAULT 0,"
+        "  resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0,1)),"
+        "  resolution_note TEXT,"
+        "  operator_user_id INTEGER,"
+        "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  FOREIGN KEY(machine_id) REFERENCES machines(id),"
+        "  FOREIGN KEY(operator_user_id) REFERENCES users(id)"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS replenishment_routes ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  route_date TEXT NOT NULL,"
+        "  operator_user_id INTEGER,"
+        "  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed','cancelled')),"
+        "  total_machines INTEGER NOT NULL DEFAULT 0,"
+        "  completed_machines INTEGER NOT NULL DEFAULT 0,"
+        "  note TEXT,"
+        "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  FOREIGN KEY(operator_user_id) REFERENCES users(id)"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS replenishment_route_items ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  route_id INTEGER NOT NULL,"
+        "  machine_id INTEGER NOT NULL,"
+        "  priority_score INTEGER NOT NULL DEFAULT 0,"
+        "  sort_order INTEGER NOT NULL DEFAULT 0,"
+        "  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','skipped','completed')),"
+        "  low_stock_reason TEXT,"
+        "  door_error INTEGER NOT NULL DEFAULT 0,"
+        "  temp_alert INTEGER NOT NULL DEFAULT 0,"
+        "  estimated_products_needed INTEGER NOT NULL DEFAULT 0,"
+        "  actual_products_restocked INTEGER NOT NULL DEFAULT 0,"
+        "  note TEXT,"
+        "  completed_at TEXT,"
+        "  FOREIGN KEY(route_id) REFERENCES replenishment_routes(id) ON DELETE CASCADE,"
+        "  FOREIGN KEY(machine_id) REFERENCES machines(id)"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS daily_reports ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  report_date TEXT NOT NULL UNIQUE,"
+        "  total_sales_cents INTEGER NOT NULL DEFAULT 0,"
+        "  cash_sales_cents INTEGER NOT NULL DEFAULT 0,"
+        "  scan_sales_cents INTEGER NOT NULL DEFAULT 0,"
+        "  other_sales_cents INTEGER NOT NULL DEFAULT 0,"
+        "  total_transactions INTEGER NOT NULL DEFAULT 0,"
+        "  total_quantity_sold INTEGER NOT NULL DEFAULT 0,"
+        "  total_downtime_loss_cents INTEGER NOT NULL DEFAULT 0,"
+        "  total_downtime_minutes INTEGER NOT NULL DEFAULT 0,"
+        "  expected_cash_cents INTEGER NOT NULL DEFAULT 0,"
+        "  actual_cash_cents INTEGER NOT NULL DEFAULT 0,"
+        "  cash_difference_cents INTEGER NOT NULL DEFAULT 0,"
+        "  expected_scan_cents INTEGER NOT NULL DEFAULT 0,"
+        "  actual_scan_cents INTEGER NOT NULL DEFAULT 0,"
+        "  scan_difference_cents INTEGER NOT NULL DEFAULT 0,"
+        "  total_discrepancy_cents INTEGER NOT NULL DEFAULT 0,"
+        "  discrepancy_note TEXT,"
+        "  machines_online INTEGER NOT NULL DEFAULT 0,"
+        "  machines_offline INTEGER NOT NULL DEFAULT 0,"
+        "  machines_in_downtime INTEGER NOT NULL DEFAULT 0,"
+        "  machines_with_door_errors INTEGER NOT NULL DEFAULT 0,"
+        "  machines_with_temp_alerts INTEGER NOT NULL DEFAULT 0,"
+        "  note TEXT,"
+        "  operator_user_id INTEGER,"
+        "  reconciled INTEGER NOT NULL DEFAULT 0 CHECK(reconciled IN (0,1)),"
+        "  reconciled_at TEXT,"
+        "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  FOREIGN KEY(operator_user_id) REFERENCES users(id)"
+        ");"
+
+        "CREATE TABLE IF NOT EXISTS shift_reconciliations ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  shift_date TEXT NOT NULL,"
+        "  shift_type TEXT NOT NULL CHECK(shift_type IN ('morning','afternoon','evening','night','daily')),"
+        "  operator_user_id INTEGER NOT NULL,"
+        "  expected_cash_cents INTEGER NOT NULL DEFAULT 0,"
+        "  actual_cash_cents INTEGER NOT NULL DEFAULT 0,"
+        "  cash_difference_cents INTEGER NOT NULL DEFAULT 0,"
+        "  expected_scan_cents INTEGER NOT NULL DEFAULT 0,"
+        "  actual_scan_cents INTEGER NOT NULL DEFAULT 0,"
+        "  scan_difference_cents INTEGER NOT NULL DEFAULT 0,"
+        "  expected_other_cents INTEGER NOT NULL DEFAULT 0,"
+        "  actual_other_cents INTEGER NOT NULL DEFAULT 0,"
+        "  other_difference_cents INTEGER NOT NULL DEFAULT 0,"
+        "  total_discrepancy_cents INTEGER NOT NULL DEFAULT 0,"
+        "  discrepancy_reason TEXT,"
+        "  note TEXT,"
+        "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  FOREIGN KEY(operator_user_id) REFERENCES users(id)"
+        ");"
+
         "CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);"
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);"
         "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);"
@@ -383,6 +530,34 @@ static int db_init(void) {
         "stock_movements(product_id);"
         "CREATE INDEX IF NOT EXISTS idx_movements_created_at ON "
         "stock_movements(created_at);"
+
+        "CREATE INDEX IF NOT EXISTS idx_machines_code ON machines(machine_code);"
+        "CREATE INDEX IF NOT EXISTS idx_machines_status ON machines(status);"
+        "CREATE INDEX IF NOT EXISTS idx_machines_door_error ON machines(door_error);"
+        "CREATE INDEX IF NOT EXISTS idx_machines_temp_alert ON machines(temp_alert);"
+
+        "CREATE INDEX IF NOT EXISTS idx_machine_stock_machine_id ON machine_stock(machine_id);"
+        "CREATE INDEX IF NOT EXISTS idx_machine_stock_product_id ON machine_stock(product_id);"
+        "CREATE INDEX IF NOT EXISTS idx_machine_stock_low ON machine_stock(stock_quantity, restock_threshold);"
+
+        "CREATE INDEX IF NOT EXISTS idx_machine_sales_machine_id ON machine_sales(machine_id);"
+        "CREATE INDEX IF NOT EXISTS idx_machine_sales_product_id ON machine_sales(product_id);"
+        "CREATE INDEX IF NOT EXISTS idx_machine_sales_created ON machine_sales(created_at);"
+        "CREATE INDEX IF NOT EXISTS idx_machine_sales_payment ON machine_sales(payment_method);"
+
+        "CREATE INDEX IF NOT EXISTS idx_downtime_machine_id ON machine_downtime(machine_id);"
+        "CREATE INDEX IF NOT EXISTS idx_downtime_start ON machine_downtime(start_time);"
+        "CREATE INDEX IF NOT EXISTS idx_downtime_resolved ON machine_downtime(resolved);"
+
+        "CREATE INDEX IF NOT EXISTS idx_routes_date ON replenishment_routes(route_date);"
+        "CREATE INDEX IF NOT EXISTS idx_routes_status ON replenishment_routes(status);"
+        "CREATE INDEX IF NOT EXISTS idx_route_items_route_id ON replenishment_route_items(route_id);"
+        "CREATE INDEX IF NOT EXISTS idx_route_items_machine_id ON replenishment_route_items(machine_id);"
+
+        "CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON daily_reports(report_date);"
+        "CREATE INDEX IF NOT EXISTS idx_daily_reports_reconciled ON daily_reports(reconciled);"
+        "CREATE INDEX IF NOT EXISTS idx_shift_rec_date ON shift_reconciliations(shift_date);"
+        "CREATE INDEX IF NOT EXISTS idx_shift_rec_operator ON shift_reconciliations(operator_user_id);"
 
         "INSERT OR IGNORE INTO products (sku, name, unit, stock_quantity) VALUES "
         "('SEED-WATER-550', '系统示例矿泉水550ml', '瓶', 50);";
@@ -1743,6 +1918,2921 @@ static enum MHD_Result handle_movements(struct MHD_Connection *connection) {
     return respond_success(connection, MHD_HTTP_OK, items);
 }
 
+static enum MHD_Result handle_create_machine(struct MHD_Connection *connection,
+                                             ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *machine_code = NULL;
+    const char *location = NULL;
+    if (require_string_field(body, "machine_code", 64, &machine_code) != 0 ||
+        require_string_field(body, "location", 256, &location) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "machine_code/location 必填");
+    }
+
+    const char *status = optional_string_field(body, "status", 16);
+    if (status == NULL) { status = "online"; }
+    if (strcmp(status, "online") != 0 && strcmp(status, "offline") != 0 &&
+        strcmp(status, "downtime") != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "status 仅支持 online/offline/downtime");
+    }
+
+    int door_error = 0;
+    int temp_alert = 0;
+    int priority_weight = 50;
+    double temp_celsius = 4.0;
+    double temp_min = 0.0;
+    double temp_max = 8.0;
+    int estimated_hourly_sales_cents = 0;
+
+    json_t *v = json_object_get(body, "door_error");
+    if (json_is_boolean(v)) {
+        door_error = json_boolean_value(v) ? 1 : 0;
+    } else if (json_is_integer(v)) {
+        door_error = json_integer_value(v) != 0 ? 1 : 0;
+    }
+
+    v = json_object_get(body, "temp_alert");
+    if (json_is_boolean(v)) {
+        temp_alert = json_boolean_value(v) ? 1 : 0;
+    } else if (json_is_integer(v)) {
+        temp_alert = json_integer_value(v) != 0 ? 1 : 0;
+    }
+
+    v = json_object_get(body, "priority_weight");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0 && n <= 100) { priority_weight = (int)n; }
+    }
+
+    v = json_object_get(body, "temp_celsius");
+    if (json_is_number(v)) { temp_celsius = json_real_value(v); }
+
+    v = json_object_get(body, "temp_min");
+    if (json_is_number(v)) { temp_min = json_real_value(v); }
+
+    v = json_object_get(body, "temp_max");
+    if (json_is_number(v)) { temp_max = json_real_value(v); }
+
+    v = json_object_get(body, "estimated_hourly_sales_cents");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) { estimated_hourly_sales_cents = (int)n; }
+    }
+
+    const char *note = optional_string_field(body, "note", 512);
+    if (note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "note 需为字符串且不超过512字符");
+    }
+
+    char machine_code_copy[65];
+    char location_copy[257];
+    char status_copy[17];
+    char note_copy[513];
+    snprintf(machine_code_copy, sizeof(machine_code_copy), "%s", machine_code);
+    snprintf(location_copy, sizeof(location_copy), "%s", location);
+    snprintf(status_copy, sizeof(status_copy), "%s", status);
+    snprintf(note_copy, sizeof(note_copy), "%s", note);
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (!is_admin_role(&user)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_FORBIDDEN, "FORBIDDEN",
+                            "仅管理员可新增售货机");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql =
+        "INSERT INTO machines (machine_code, location, status, door_error, "
+        "temp_celsius, temp_alert, temp_min, temp_max, estimated_hourly_sales_cents, "
+        "priority_weight, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "新增售货机失败");
+    }
+
+    sqlite3_bind_text(stmt, 1, machine_code_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, location_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, status_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 4, door_error);
+    sqlite3_bind_double(stmt, 5, temp_celsius);
+    sqlite3_bind_int(stmt, 6, temp_alert);
+    sqlite3_bind_double(stmt, 7, temp_min);
+    sqlite3_bind_double(stmt, 8, temp_max);
+    sqlite3_bind_int(stmt, 9, estimated_hourly_sales_cents);
+    sqlite3_bind_int(stmt, 10, priority_weight);
+    sqlite3_bind_text(stmt, 11, note_copy, -1, SQLITE_TRANSIENT);
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    if (rc != SQLITE_DONE) {
+        if (rc == SQLITE_CONSTRAINT) {
+            return respond_error(connection, MHD_HTTP_CONFLICT, "CONFLICT",
+                                "售货机编号已存在");
+        }
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "新增售货机失败");
+    }
+
+    json_t *data = json_object();
+    json_object_set_new(data, "machine_code", json_string(machine_code_copy));
+    json_object_set_new(data, "location", json_string(location_copy));
+    json_object_set_new(data, "status", json_string(status_copy));
+    return respond_success(connection, MHD_HTTP_CREATED, data);
+}
+
+static enum MHD_Result handle_list_machines(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *status_filter =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "status");
+    const char *has_error =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "has_error");
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT id, machine_code, location, status, door_error, temp_celsius, "
+        "temp_alert, temp_min, temp_max, estimated_hourly_sales_cents, "
+        "priority_weight, note, created_at, updated_at FROM machines ";
+
+    char sql[1024];
+    int use_status = 0;
+    int use_error = 0;
+    const char *status_val = NULL;
+    const char *error_val = NULL;
+
+    if (status_filter != NULL && *status_filter != '\0' &&
+        (strcmp(status_filter, "online") == 0 || strcmp(status_filter, "offline") == 0 ||
+         strcmp(status_filter, "downtime") == 0)) {
+        use_status = 1;
+        status_val = status_filter;
+    }
+
+    if (has_error != NULL && *has_error != '\0' &&
+        (strcmp(has_error, "door") == 0 || strcmp(has_error, "temp") == 0 ||
+         strcmp(has_error, "any") == 0)) {
+        use_error = 1;
+        error_val = has_error;
+    }
+
+    if (use_status || use_error) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_status) {
+            strcat(sql, "status = ? ");
+            first = 0;
+        }
+        if (use_error) {
+            if (!first) strcat(sql, "AND ");
+            if (strcmp(error_val, "door") == 0) {
+                strcat(sql, "door_error = 1 ");
+            } else if (strcmp(error_val, "temp") == 0) {
+                strcat(sql, "temp_alert = 1 ");
+            } else {
+                strcat(sql, "(door_error = 1 OR temp_alert = 1) ");
+            }
+        }
+        strcat(sql, "ORDER BY priority_weight DESC, id ASC;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY priority_weight DESC, id ASC;", sql_base);
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询售货机列表失败");
+    }
+
+    int idx = 1;
+    if (use_status) {
+        sqlite3_bind_text(stmt, idx++, status_val, -1, SQLITE_TRANSIENT);
+    }
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *item = json_object();
+        json_object_set_new(item, "id", json_integer(sqlite3_column_int(stmt, 0)));
+        json_object_set_new(item, "machine_code", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(item, "location", json_string(safe_col_text(stmt, 2)));
+        json_object_set_new(item, "status", json_string(safe_col_text(stmt, 3)));
+        json_object_set_new(item, "door_error",
+                            json_integer(sqlite3_column_int(stmt, 4)));
+        json_object_set_new(item, "temp_celsius",
+                            json_real(sqlite3_column_double(stmt, 5)));
+        json_object_set_new(item, "temp_alert",
+                            json_integer(sqlite3_column_int(stmt, 6)));
+        json_object_set_new(item, "temp_min",
+                            json_real(sqlite3_column_double(stmt, 7)));
+        json_object_set_new(item, "temp_max",
+                            json_real(sqlite3_column_double(stmt, 8)));
+        json_object_set_new(item, "estimated_hourly_sales_cents",
+                            json_integer(sqlite3_column_int(stmt, 9)));
+        json_object_set_new(item, "priority_weight",
+                            json_integer(sqlite3_column_int(stmt, 10)));
+        json_object_set_new(item, "note", json_string(safe_col_text(stmt, 11)));
+        json_object_set_new(item, "created_at", json_string(safe_col_text(stmt, 12)));
+        json_object_set_new(item, "updated_at", json_string(safe_col_text(stmt, 13)));
+        json_array_append_new(items, item);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取售货机列表失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
+static enum MHD_Result handle_update_machine(struct MHD_Connection *connection,
+                                             ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *machine_code = NULL;
+    if (require_string_field(body, "machine_code", 64, &machine_code) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "machine_code 必填");
+    }
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int machine_id = 0;
+    int current_door_error = 0;
+    int current_temp_alert = 0;
+    double current_temp = 4.0;
+    char current_status[32] = {0};
+
+    const char *find_sql =
+        "SELECT id, status, door_error, temp_celsius, temp_alert "
+        "FROM machines WHERE machine_code = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询售货机失败");
+    }
+    sqlite3_bind_text(stmt, 1, machine_code, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "售货机不存在");
+    }
+    machine_id = sqlite3_column_int(stmt, 0);
+    snprintf(current_status, sizeof(current_status), "%s", safe_col_text(stmt, 1));
+    current_door_error = sqlite3_column_int(stmt, 2);
+    current_temp = sqlite3_column_double(stmt, 3);
+    current_temp_alert = sqlite3_column_int(stmt, 4);
+    sqlite3_finalize(stmt);
+
+    const char *location = optional_string_field(body, "location", 256);
+    const char *status = optional_string_field(body, "status", 16);
+    const char *note = optional_string_field(body, "note", 512);
+
+    if (location == NULL || status == NULL || note == NULL) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "location/status/note 需为合法字符串");
+    }
+
+    if (status != NULL && *status != '\0') {
+        if (strcmp(status, "online") != 0 && strcmp(status, "offline") != 0 &&
+            strcmp(status, "downtime") != 0) {
+            pthread_mutex_unlock(&g_db_mutex);
+            json_decref(body);
+            return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                                "status 仅支持 online/offline/downtime");
+        }
+    }
+
+    char new_location[257];
+    char new_status[17];
+    char new_note[513];
+    snprintf(new_location, sizeof(new_location), "%s",
+             location != NULL && *location != '\0' ? location : "");
+    snprintf(new_status, sizeof(new_status), "%s",
+             status != NULL && *status != '\0' ? status : current_status);
+    snprintf(new_note, sizeof(new_note), "%s",
+             note != NULL ? note : "");
+
+    int door_error = current_door_error;
+    int temp_alert = current_temp_alert;
+    int priority_weight = -1;
+    double temp_celsius = current_temp;
+    double temp_min = -1.0;
+    double temp_max = -1.0;
+    int estimated_hourly_sales_cents = -1;
+
+    json_t *v = json_object_get(body, "door_error");
+    if (json_is_boolean(v)) {
+        door_error = json_boolean_value(v) ? 1 : 0;
+    } else if (json_is_integer(v)) {
+        door_error = json_integer_value(v) != 0 ? 1 : 0;
+    }
+
+    v = json_object_get(body, "temp_alert");
+    if (json_is_boolean(v)) {
+        temp_alert = json_boolean_value(v) ? 1 : 0;
+    } else if (json_is_integer(v)) {
+        temp_alert = json_integer_value(v) != 0 ? 1 : 0;
+    }
+
+    v = json_object_get(body, "priority_weight");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0 && n <= 100) { priority_weight = (int)n; }
+    }
+
+    v = json_object_get(body, "temp_celsius");
+    if (json_is_number(v)) { temp_celsius = json_real_value(v); }
+
+    v = json_object_get(body, "temp_min");
+    if (json_is_number(v)) { temp_min = json_real_value(v); }
+
+    v = json_object_get(body, "temp_max");
+    if (json_is_number(v)) { temp_max = json_real_value(v); }
+
+    v = json_object_get(body, "estimated_hourly_sales_cents");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) { estimated_hourly_sales_cents = (int)n; }
+    }
+
+    const char *update_sql =
+        "UPDATE machines SET location = ?, status = ?, door_error = ?, "
+        "temp_celsius = ?, temp_alert = ?, priority_weight = ?, note = ?, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, update_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新售货机预编译失败");
+    }
+
+    sqlite3_bind_text(stmt, 1, new_location, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, new_status, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 3, door_error);
+    sqlite3_bind_double(stmt, 4, temp_celsius);
+    sqlite3_bind_int(stmt, 5, temp_alert);
+    sqlite3_bind_int(stmt, 6, priority_weight >= 0 ? priority_weight : 50);
+    sqlite3_bind_text(stmt, 7, new_note, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 8, machine_id);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (temp_min >= 0.0 || temp_max >= 0.0 || estimated_hourly_sales_cents >= 0) {
+        char update_sql2[512];
+        int first = 0;
+        strcpy(update_sql2, "UPDATE machines SET ");
+        if (temp_min >= 0.0) {
+            strcat(update_sql2, "temp_min = ?");
+            first = 1;
+        }
+        if (temp_max >= 0.0) {
+            if (first) strcat(update_sql2, ", ");
+            strcat(update_sql2, "temp_max = ?");
+            first = 1;
+        }
+        if (estimated_hourly_sales_cents >= 0) {
+            if (first) strcat(update_sql2, ", ");
+            strcat(update_sql2, "estimated_hourly_sales_cents = ?");
+        }
+        strcat(update_sql2, " WHERE id = ?;");
+
+        if (sqlite3_prepare_v2(g_db, update_sql2, -1, &stmt, NULL) != SQLITE_OK) {
+            pthread_mutex_unlock(&g_db_mutex);
+            json_decref(body);
+            return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                                "DB_ERROR", "更新售货机附加字段失败");
+        }
+        int idx2 = 1;
+        if (temp_min >= 0.0) sqlite3_bind_double(stmt, idx2++, temp_min);
+        if (temp_max >= 0.0) sqlite3_bind_double(stmt, idx2++, temp_max);
+        if (estimated_hourly_sales_cents >= 0)
+            sqlite3_bind_int(stmt, idx2++, estimated_hourly_sales_cents);
+        sqlite3_bind_int(stmt, idx2, machine_id);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    if (rc != SQLITE_DONE) {
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新售货机失败");
+    }
+
+    json_t *data = json_object();
+    json_object_set_new(data, "machine_code", json_string(machine_code));
+    json_object_set_new(data, "status", json_string(new_status));
+    json_object_set_new(data, "door_error", json_integer(door_error));
+    json_object_set_new(data, "temp_alert", json_integer(temp_alert));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_delete_machine(struct MHD_Connection *connection,
+                                             ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *machine_code = NULL;
+    if (require_string_field(body, "machine_code", 64, &machine_code) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "machine_code 必填");
+    }
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (!is_admin_role(&user)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_FORBIDDEN, "FORBIDDEN",
+                            "仅管理员可删除售货机");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql = "DELETE FROM machines WHERE machine_code = ?;";
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "删除售货机失败");
+    }
+
+    sqlite3_bind_text(stmt, 1, machine_code, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    int changes = sqlite3_changes(g_db);
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    if (rc != SQLITE_DONE) {
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "删除售货机失败");
+    }
+
+    if (changes == 0) {
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "售货机不存在");
+    }
+
+    json_t *data = json_object();
+    json_object_set_new(data, "message", json_string("删除成功"));
+    json_object_set_new(data, "machine_code", json_string(machine_code));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_machine_stock_add(struct MHD_Connection *connection,
+                                                ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *machine_code = NULL;
+    const char *sku = NULL;
+    if (require_string_field(body, "machine_code", 64, &machine_code) != 0 ||
+        require_string_field(body, "sku", 64, &sku) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "machine_code/sku 必填");
+    }
+
+    int quantity = 0;
+    int capacity = 50;
+    int restock_threshold = 10;
+    if (parse_int_field(body, "quantity", 1, 10000, &quantity) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "quantity 必须为 1-10000 的整数");
+    }
+
+    json_t *v = json_object_get(body, "capacity");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n > 0) capacity = (int)n;
+    }
+
+    v = json_object_get(body, "restock_threshold");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) restock_threshold = (int)n;
+    }
+
+    const char *note = optional_string_field(body, "note", 256);
+    if (note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "note 需为字符串且不超过256字符");
+    }
+
+    char machine_code_copy[65];
+    char sku_copy[65];
+    char note_copy[257];
+    snprintf(machine_code_copy, sizeof(machine_code_copy), "%s", machine_code);
+    snprintf(sku_copy, sizeof(sku_copy), "%s", sku);
+    snprintf(note_copy, sizeof(note_copy), "%s", note);
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int machine_id = 0;
+    const char *find_machine = "SELECT id FROM machines WHERE machine_code = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_machine, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询售货机失败");
+    }
+    sqlite3_bind_text(stmt, 1, machine_code_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "售货机不存在");
+    }
+    machine_id = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    int product_id = 0;
+    const char *find_product = "SELECT id FROM products WHERE sku = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_product, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询商品失败");
+    }
+    sqlite3_bind_text(stmt, 1, sku_copy, -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "商品不存在");
+    }
+    product_id = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    int current_stock = 0;
+    int existing_id = 0;
+    const char *find_stock =
+        "SELECT id, stock_quantity FROM machine_stock "
+        "WHERE machine_id = ? AND product_id = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_stock, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询库存失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    sqlite3_bind_int(stmt, 2, product_id);
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        existing_id = sqlite3_column_int(stmt, 0);
+        current_stock = sqlite3_column_int(stmt, 1);
+    }
+    sqlite3_finalize(stmt);
+
+    int new_stock = current_stock + quantity;
+    if (new_stock > capacity) new_stock = capacity;
+    int actual_added = new_stock - current_stock;
+
+    if (existing_id > 0) {
+        const char *upd_stock =
+            "UPDATE machine_stock SET stock_quantity = ?, capacity = ?, "
+            "restock_threshold = ?, last_restock_at = CURRENT_TIMESTAMP, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+        if (sqlite3_prepare_v2(g_db, upd_stock, -1, &stmt, NULL) != SQLITE_OK) {
+            rollback_transaction();
+            pthread_mutex_unlock(&g_db_mutex);
+            json_decref(body);
+            return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                                "DB_ERROR", "更新库存失败");
+        }
+        sqlite3_bind_int(stmt, 1, new_stock);
+        sqlite3_bind_int(stmt, 2, capacity);
+        sqlite3_bind_int(stmt, 3, restock_threshold);
+        sqlite3_bind_int(stmt, 4, existing_id);
+    } else {
+        const char *ins_stock =
+            "INSERT INTO machine_stock (machine_id, product_id, stock_quantity, "
+            "capacity, restock_threshold, last_restock_at) "
+            "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP);";
+        if (sqlite3_prepare_v2(g_db, ins_stock, -1, &stmt, NULL) != SQLITE_OK) {
+            rollback_transaction();
+            pthread_mutex_unlock(&g_db_mutex);
+            json_decref(body);
+            return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                                "DB_ERROR", "新增库存失败");
+        }
+        sqlite3_bind_int(stmt, 1, machine_id);
+        sqlite3_bind_int(stmt, 2, product_id);
+        sqlite3_bind_int(stmt, 3, new_stock);
+        sqlite3_bind_int(stmt, 4, capacity);
+        sqlite3_bind_int(stmt, 5, restock_threshold);
+    }
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE || commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交补货事务失败");
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "machine_code", json_string(machine_code_copy));
+    json_object_set_new(data, "sku", json_string(sku_copy));
+    json_object_set_new(data, "added_quantity", json_integer(actual_added));
+    json_object_set_new(data, "stock_quantity", json_integer(new_stock));
+    json_object_set_new(data, "capacity", json_integer(capacity));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_machine_stock_list(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *machine_code =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "machine_code");
+    const char *low_stock =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "low_stock");
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT m.machine_code, m.location, p.sku, p.name, p.unit, "
+        "ms.stock_quantity, ms.capacity, ms.restock_threshold, "
+        "ms.last_restock_at, ms.updated_at "
+        "FROM machine_stock ms "
+        "JOIN machines m ON m.id = ms.machine_id "
+        "JOIN products p ON p.id = ms.product_id ";
+
+    char sql[2048];
+    int use_machine = 0;
+    int use_low = 0;
+    const char *mc_val = NULL;
+
+    if (machine_code != NULL && *machine_code != '\0') {
+        use_machine = 1;
+        mc_val = machine_code;
+    }
+    if (low_stock != NULL && *low_stock != '\0' && strcmp(low_stock, "1") == 0) {
+        use_low = 1;
+    }
+
+    if (use_machine || use_low) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_machine) {
+            strcat(sql, "m.machine_code = ? ");
+            first = 0;
+        }
+        if (use_low) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "ms.stock_quantity <= ms.restock_threshold ");
+        }
+        strcat(sql, "ORDER BY ms.stock_quantity ASC, m.machine_code ASC;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY m.machine_code ASC, p.sku ASC;", sql_base);
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询售货机库存失败");
+    }
+
+    int idx = 1;
+    if (use_machine) {
+        sqlite3_bind_text(stmt, idx++, mc_val, -1, SQLITE_TRANSIENT);
+    }
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *item = json_object();
+        json_object_set_new(item, "machine_code", json_string(safe_col_text(stmt, 0)));
+        json_object_set_new(item, "location", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(item, "sku", json_string(safe_col_text(stmt, 2)));
+        json_object_set_new(item, "product_name", json_string(safe_col_text(stmt, 3)));
+        json_object_set_new(item, "unit", json_string(safe_col_text(stmt, 4)));
+        json_object_set_new(item, "stock_quantity",
+                            json_integer(sqlite3_column_int(stmt, 5)));
+        json_object_set_new(item, "capacity",
+                            json_integer(sqlite3_column_int(stmt, 6)));
+        json_object_set_new(item, "restock_threshold",
+                            json_integer(sqlite3_column_int(stmt, 7)));
+        json_object_set_new(item, "last_restock_at",
+                            json_string(safe_col_text(stmt, 8)));
+        json_object_set_new(item, "updated_at", json_string(safe_col_text(stmt, 9)));
+        json_array_append_new(items, item);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取售货机库存失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
+static enum MHD_Result handle_machine_sale(struct MHD_Connection *connection,
+                                           ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *machine_code = NULL;
+    const char *sku = NULL;
+    const char *payment_method = NULL;
+    if (require_string_field(body, "machine_code", 64, &machine_code) != 0 ||
+        require_string_field(body, "sku", 64, &sku) != 0 ||
+        require_string_field(body, "payment_method", 16, &payment_method) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "machine_code/sku/payment_method 必填");
+    }
+
+    if (strcmp(payment_method, "cash") != 0 &&
+        strcmp(payment_method, "scan") != 0 &&
+        strcmp(payment_method, "other") != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "payment_method 仅支持 cash/scan/other");
+    }
+
+    int quantity = 0;
+    int unit_price_cents = 0;
+    if (parse_int_field(body, "quantity", 1, 1000, &quantity) != 0 ||
+        parse_int_field(body, "unit_price_cents", 0, 1000000, &unit_price_cents) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "quantity/unit_price_cents 必须为合法整数");
+    }
+
+    int total_amount = quantity * unit_price_cents;
+
+    const char *note = optional_string_field(body, "note", 256);
+    if (note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "note 需为字符串且不超过256字符");
+    }
+
+    char machine_code_copy[65];
+    char sku_copy[65];
+    char payment_copy[17];
+    char note_copy[257];
+    snprintf(machine_code_copy, sizeof(machine_code_copy), "%s", machine_code);
+    snprintf(sku_copy, sizeof(sku_copy), "%s", sku);
+    snprintf(payment_copy, sizeof(payment_copy), "%s", payment_method);
+    snprintf(note_copy, sizeof(note_copy), "%s", note);
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    int has_auth = authenticate_request(connection, &user, token_hash);
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int machine_id = 0;
+    const char *find_machine = "SELECT id, status FROM machines WHERE machine_code = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_machine, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询售货机失败");
+    }
+    sqlite3_bind_text(stmt, 1, machine_code_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "售货机不存在");
+    }
+    machine_id = sqlite3_column_int(stmt, 0);
+    const char *m_status = safe_col_text(stmt, 1);
+    sqlite3_finalize(stmt);
+
+    if (strcmp(m_status, "online") != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_CONFLICT, "MACHINE_OFFLINE",
+                            "售货机不在线，无法销售");
+    }
+
+    int product_id = 0;
+    const char *find_product = "SELECT id FROM products WHERE sku = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_product, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询商品失败");
+    }
+    sqlite3_bind_text(stmt, 1, sku_copy, -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "商品不存在");
+    }
+    product_id = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    int current_stock = 0;
+    const char *find_stock =
+        "SELECT stock_quantity FROM machine_stock "
+        "WHERE machine_id = ? AND product_id = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_stock, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询库存失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    sqlite3_bind_int(stmt, 2, product_id);
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        current_stock = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (current_stock < quantity) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_CONFLICT, "INSUFFICIENT_STOCK",
+                            "售货机库存不足");
+    }
+
+    int new_stock = current_stock - quantity;
+    const char *upd_stock =
+        "UPDATE machine_stock SET stock_quantity = ?, "
+        "updated_at = CURRENT_TIMESTAMP "
+        "WHERE machine_id = ? AND product_id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_stock, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新库存失败");
+    }
+    sqlite3_bind_int(stmt, 1, new_stock);
+    sqlite3_bind_int(stmt, 2, machine_id);
+    sqlite3_bind_int(stmt, 3, product_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新库存失败");
+    }
+
+    const char *ins_sale =
+        "INSERT INTO machine_sales (machine_id, product_id, quantity, "
+        "unit_price_cents, total_amount_cents, payment_method, note, "
+        "operator_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(g_db, ins_sale, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "记录销售失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    sqlite3_bind_int(stmt, 2, product_id);
+    sqlite3_bind_int(stmt, 3, quantity);
+    sqlite3_bind_int(stmt, 4, unit_price_cents);
+    sqlite3_bind_int(stmt, 5, total_amount);
+    sqlite3_bind_text(stmt, 6, payment_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 7, note_copy, -1, SQLITE_TRANSIENT);
+    if (has_auth) {
+        sqlite3_bind_int(stmt, 8, user.user_id);
+    } else {
+        sqlite3_bind_null(stmt, 8);
+    }
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE || commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交销售事务失败");
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "machine_code", json_string(machine_code_copy));
+    json_object_set_new(data, "sku", json_string(sku_copy));
+    json_object_set_new(data, "quantity", json_integer(quantity));
+    json_object_set_new(data, "unit_price_cents", json_integer(unit_price_cents));
+    json_object_set_new(data, "total_amount_cents", json_integer(total_amount));
+    json_object_set_new(data, "payment_method", json_string(payment_copy));
+    json_object_set_new(data, "stock_remaining", json_integer(new_stock));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_machine_sales_list(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *machine_code =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "machine_code");
+    const char *payment_method =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "payment_method");
+    const char *date =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "date");
+    int limit = parse_limit_query(connection);
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT s.id, m.machine_code, m.location, p.sku, p.name, "
+        "s.quantity, s.unit_price_cents, s.total_amount_cents, "
+        "s.payment_method, s.note, u.username, s.created_at "
+        "FROM machine_sales s "
+        "JOIN machines m ON m.id = s.machine_id "
+        "JOIN products p ON p.id = s.product_id "
+        "LEFT JOIN users u ON u.id = s.operator_user_id ";
+
+    char sql[2048];
+    int use_machine = 0, use_payment = 0, use_date = 0;
+    const char *mc_val = NULL, *pm_val = NULL, *date_val = NULL;
+
+    if (machine_code != NULL && *machine_code != '\0') {
+        use_machine = 1; mc_val = machine_code;
+    }
+    if (payment_method != NULL && *payment_method != '\0' &&
+        (strcmp(payment_method, "cash") == 0 ||
+         strcmp(payment_method, "scan") == 0 ||
+         strcmp(payment_method, "other") == 0)) {
+        use_payment = 1; pm_val = payment_method;
+    }
+    if (date != NULL && *date != '\0' && strlen(date) == 10) {
+        use_date = 1; date_val = date;
+    }
+
+    if (use_machine || use_payment || use_date) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_machine) {
+            strcat(sql, "m.machine_code = ? ");
+            first = 0;
+        }
+        if (use_payment) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "s.payment_method = ? ");
+            first = 0;
+        }
+        if (use_date) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "DATE(s.created_at) = ? ");
+        }
+        strcat(sql, "ORDER BY s.id DESC LIMIT ?;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY s.id DESC LIMIT ?;", sql_base);
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询销售记录失败");
+    }
+
+    int idx = 1;
+    if (use_machine) sqlite3_bind_text(stmt, idx++, mc_val, -1, SQLITE_TRANSIENT);
+    if (use_payment) sqlite3_bind_text(stmt, idx++, pm_val, -1, SQLITE_TRANSIENT);
+    if (use_date) sqlite3_bind_text(stmt, idx++, date_val, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, idx, limit);
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *it = json_object();
+        json_object_set_new(it, "id", json_integer(sqlite3_column_int(stmt, 0)));
+        json_object_set_new(it, "machine_code", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(it, "location", json_string(safe_col_text(stmt, 2)));
+        json_object_set_new(it, "sku", json_string(safe_col_text(stmt, 3)));
+        json_object_set_new(it, "product_name", json_string(safe_col_text(stmt, 4)));
+        json_object_set_new(it, "quantity", json_integer(sqlite3_column_int(stmt, 5)));
+        json_object_set_new(it, "unit_price_cents",
+                            json_integer(sqlite3_column_int(stmt, 6)));
+        json_object_set_new(it, "total_amount_cents",
+                            json_integer(sqlite3_column_int(stmt, 7)));
+        json_object_set_new(it, "payment_method", json_string(safe_col_text(stmt, 8)));
+        json_object_set_new(it, "note", json_string(safe_col_text(stmt, 9)));
+        json_object_set_new(it, "operator", json_string(safe_col_text(stmt, 10)));
+        json_object_set_new(it, "created_at", json_string(safe_col_text(stmt, 11)));
+        json_array_append_new(items, it);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取销售记录失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
+static enum MHD_Result handle_downtime_start(struct MHD_Connection *connection,
+                                              ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *machine_code = NULL;
+    const char *reason = NULL;
+    if (require_string_field(body, "machine_code", 64, &machine_code) != 0 ||
+        require_string_field(body, "reason", 512, &reason) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "machine_code/reason 必填");
+    }
+
+    int estimated_loss_cents = 0;
+    json_t *v = json_object_get(body, "estimated_loss_cents");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) estimated_loss_cents = (int)n;
+    }
+
+    const char *note = optional_string_field(body, "note", 512);
+    if (note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "note 需为字符串且不超过512字符");
+    }
+
+    char machine_code_copy[65];
+    char reason_copy[513];
+    char note_copy[513];
+    snprintf(machine_code_copy, sizeof(machine_code_copy), "%s", machine_code);
+    snprintf(reason_copy, sizeof(reason_copy), "%s", reason);
+    snprintf(note_copy, sizeof(note_copy), "%s", note);
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    int has_auth = authenticate_request(connection, &user, token_hash);
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int machine_id = 0;
+    int hourly_sales = 0;
+    const char *find_machine =
+        "SELECT id, estimated_hourly_sales_cents FROM machines "
+        "WHERE machine_code = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_machine, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询售货机失败");
+    }
+    sqlite3_bind_text(stmt, 1, machine_code_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "售货机不存在");
+    }
+    machine_id = sqlite3_column_int(stmt, 0);
+    hourly_sales = sqlite3_column_int(stmt, 1);
+    sqlite3_finalize(stmt);
+
+    int unresolved = 0;
+    const char *check_sql =
+        "SELECT COUNT(*) FROM machine_downtime "
+        "WHERE machine_id = ? AND resolved = 0;";
+    if (sqlite3_prepare_v2(g_db, check_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "检查未解决停机失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        unresolved = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (unresolved > 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_CONFLICT, "DOWNTIME_EXISTS",
+                            "该机存在未解决的停机记录");
+    }
+
+    if (estimated_loss_cents == 0 && hourly_sales > 0) {
+        estimated_loss_cents = hourly_sales / 60;
+    }
+
+    const char *ins_downtime =
+        "INSERT INTO machine_downtime (machine_id, start_time, reason, "
+        "estimated_loss_cents, operator_user_id, note) "
+        "VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(g_db, ins_downtime, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "记录停机失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    sqlite3_bind_text(stmt, 2, reason_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 3, estimated_loss_cents);
+    if (has_auth) {
+        sqlite3_bind_int(stmt, 4, user.user_id);
+    } else {
+        sqlite3_bind_null(stmt, 4);
+    }
+    sqlite3_bind_text(stmt, 5, note_copy, -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    const char *upd_status =
+        "UPDATE machines SET status = 'downtime', "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_status, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新售货机状态失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE || commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交停机事务失败");
+    }
+
+    int downtime_id = (int)sqlite3_last_insert_rowid(g_db);
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "downtime_id", json_integer(downtime_id));
+    json_object_set_new(data, "machine_code", json_string(machine_code_copy));
+    json_object_set_new(data, "reason", json_string(reason_copy));
+    json_object_set_new(data, "estimated_loss_per_minute_cents",
+                        json_integer(estimated_loss_cents));
+    json_object_set_new(data, "status", json_string("started"));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_downtime_end(struct MHD_Connection *connection,
+                                            ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    int downtime_id = 0;
+    if (parse_int_field(body, "downtime_id", 1, 1000000, &downtime_id) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "downtime_id 必填且为正整数");
+    }
+
+    int actual_loss_cents = -1;
+    json_t *v = json_object_get(body, "actual_loss_cents");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) actual_loss_cents = (int)n;
+    }
+
+    const char *resolution_note = optional_string_field(body, "resolution_note", 512);
+    if (resolution_note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "resolution_note 需为字符串");
+    }
+
+    char resolution_copy[513];
+    snprintf(resolution_copy, sizeof(resolution_copy), "%s",
+             resolution_note != NULL ? resolution_note : "");
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    int has_auth = authenticate_request(connection, &user, token_hash);
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int machine_id = 0;
+    int estimated_per_min = 0;
+    char start_time[64] = {0};
+    const char *find_dt =
+        "SELECT machine_id, start_time, estimated_loss_cents, resolved "
+        "FROM machine_downtime WHERE id = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_dt, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询停机记录失败");
+    }
+    sqlite3_bind_int(stmt, 1, downtime_id);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "停机记录不存在");
+    }
+    machine_id = sqlite3_column_int(stmt, 0);
+    snprintf(start_time, sizeof(start_time), "%s", safe_col_text(stmt, 1));
+    estimated_per_min = sqlite3_column_int(stmt, 2);
+    int resolved = sqlite3_column_int(stmt, 3);
+    sqlite3_finalize(stmt);
+
+    if (resolved) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_CONFLICT, "ALREADY_RESOLVED",
+                            "该停机记录已解决");
+    }
+
+    int duration_min = 0;
+    int total_loss = 0;
+
+    const char *calc_sql =
+        "SELECT "
+        "CAST((julianday(CURRENT_TIMESTAMP) - julianday(?)) * 24 * 60 AS INTEGER);";
+    if (sqlite3_prepare_v2(g_db, calc_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "计算停机时长失败");
+    }
+    sqlite3_bind_text(stmt, 1, start_time, -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        duration_min = sqlite3_column_int(stmt, 0);
+        if (duration_min < 1) duration_min = 1;
+    }
+    sqlite3_finalize(stmt);
+
+    if (actual_loss_cents >= 0) {
+        total_loss = actual_loss_cents;
+    } else {
+        total_loss = estimated_per_min * duration_min;
+    }
+
+    const char *upd_dt =
+        "UPDATE machine_downtime SET end_time = CURRENT_TIMESTAMP, "
+        "duration_minutes = ?, estimated_loss_cents = ?, resolved = 1, "
+        "resolution_note = ?, operator_user_id = ? WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_dt, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新停机记录失败");
+    }
+    sqlite3_bind_int(stmt, 1, duration_min);
+    sqlite3_bind_int(stmt, 2, total_loss);
+    sqlite3_bind_text(stmt, 3, resolution_copy, -1, SQLITE_TRANSIENT);
+    if (has_auth) {
+        sqlite3_bind_int(stmt, 4, user.user_id);
+    } else {
+        sqlite3_bind_null(stmt, 4);
+    }
+    sqlite3_bind_int(stmt, 5, downtime_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    const char *upd_machine =
+        "UPDATE machines SET status = 'online', "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_machine, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新售货机状态失败");
+    }
+    sqlite3_bind_int(stmt, 1, machine_id);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE || commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交解决停机事务失败");
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "downtime_id", json_integer(downtime_id));
+    json_object_set_new(data, "duration_minutes", json_integer(duration_min));
+    json_object_set_new(data, "total_loss_cents", json_integer(total_loss));
+    json_object_set_new(data, "status", json_string("resolved"));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_downtime_list(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *machine_code =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "machine_code");
+    const char *resolved =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "resolved");
+    const char *date =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "date");
+    int limit = parse_limit_query(connection);
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT d.id, m.machine_code, m.location, d.start_time, d.end_time, "
+        "d.duration_minutes, d.reason, d.estimated_loss_cents, d.resolved, "
+        "d.resolution_note, u.username, d.created_at "
+        "FROM machine_downtime d "
+        "JOIN machines m ON m.id = d.machine_id "
+        "LEFT JOIN users u ON u.id = d.operator_user_id ";
+
+    char sql[2048];
+    int use_machine = 0, use_resolved = 0, use_date = 0;
+    const char *mc_val = NULL, *date_val = NULL;
+    int resolved_val = -1;
+
+    if (machine_code != NULL && *machine_code != '\0') {
+        use_machine = 1; mc_val = machine_code;
+    }
+    if (resolved != NULL && *resolved != '\0') {
+        if (strcmp(resolved, "0") == 0 || strcmp(resolved, "1") == 0) {
+            use_resolved = 1;
+            resolved_val = strcmp(resolved, "1") == 0 ? 1 : 0;
+        }
+    }
+    if (date != NULL && *date != '\0' && strlen(date) == 10) {
+        use_date = 1; date_val = date;
+    }
+
+    if (use_machine || use_resolved || use_date) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_machine) {
+            strcat(sql, "m.machine_code = ? ");
+            first = 0;
+        }
+        if (use_resolved) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "d.resolved = ? ");
+            first = 0;
+        }
+        if (use_date) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "DATE(d.start_time) = ? ");
+        }
+        strcat(sql, "ORDER BY d.id DESC LIMIT ?;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY d.id DESC LIMIT ?;", sql_base);
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询停机记录失败");
+    }
+
+    int idx = 1;
+    if (use_machine) sqlite3_bind_text(stmt, idx++, mc_val, -1, SQLITE_TRANSIENT);
+    if (use_resolved) sqlite3_bind_int(stmt, idx++, resolved_val);
+    if (use_date) sqlite3_bind_text(stmt, idx++, date_val, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, idx, limit);
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *it = json_object();
+        json_object_set_new(it, "id", json_integer(sqlite3_column_int(stmt, 0)));
+        json_object_set_new(it, "machine_code", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(it, "location", json_string(safe_col_text(stmt, 2)));
+        json_object_set_new(it, "start_time", json_string(safe_col_text(stmt, 3)));
+        json_object_set_new(it, "end_time", json_string(safe_col_text(stmt, 4)));
+        json_object_set_new(it, "duration_minutes",
+                            json_integer(sqlite3_column_int(stmt, 5)));
+        json_object_set_new(it, "reason", json_string(safe_col_text(stmt, 6)));
+        json_object_set_new(it, "loss_cents",
+                            json_integer(sqlite3_column_int(stmt, 7)));
+        json_object_set_new(it, "resolved",
+                            json_integer(sqlite3_column_int(stmt, 8)));
+        json_object_set_new(it, "resolution_note", json_string(safe_col_text(stmt, 9)));
+        json_object_set_new(it, "operator", json_string(safe_col_text(stmt, 10)));
+        json_object_set_new(it, "created_at", json_string(safe_col_text(stmt, 11)));
+        json_array_append_new(items, it);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取停机记录失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
+static enum MHD_Result handle_replenishment_generate(struct MHD_Connection *connection,
+                                                     ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    int has_body = (parse_json_body(ci, &body, err) == 0);
+
+    const char *route_date = NULL;
+    int min_priority = 0;
+    int max_machines = 0;
+
+    if (has_body && body != NULL) {
+        route_date = optional_string_field(body, "route_date", 10);
+        json_t *v = json_object_get(body, "min_priority");
+        if (json_is_integer(v)) {
+            json_int_t n = json_integer_value(v);
+            if (n >= 0 && n <= 100) min_priority = (int)n;
+        }
+        v = json_object_get(body, "max_machines");
+        if (json_is_integer(v)) {
+            json_int_t n = json_integer_value(v);
+            if (n > 0) max_machines = (int)n;
+        }
+    }
+
+    char date_buf[16] = {0};
+    if (route_date == NULL || *route_date == '\0') {
+        time_t t = now_epoch();
+        struct tm *tm_info = localtime(&t);
+        strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", tm_info);
+        route_date = date_buf;
+    }
+
+    char route_date_copy[16];
+    snprintf(route_date_copy, sizeof(route_date_copy), "%s", route_date);
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int existing_route = 0;
+    const char *check_sql =
+        "SELECT id FROM replenishment_routes WHERE route_date = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, check_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "检查已有路线失败");
+    }
+    sqlite3_bind_text(stmt, 1, route_date_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) existing_route = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    if (existing_route > 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        json_t *data = json_object();
+        json_object_set_new(data, "route_id", json_integer(existing_route));
+        json_object_set_new(data, "route_date", json_string(route_date_copy));
+        json_object_set_new(data, "message", json_string("当日路线已存在"));
+        return respond_success(connection, MHD_HTTP_OK, data);
+    }
+
+    const char *machines_sql =
+        "SELECT m.id, m.machine_code, m.location, m.status, m.door_error, "
+        "m.temp_alert, m.priority_weight, m.estimated_hourly_sales_cents, "
+        "COALESCE(SUM(CASE WHEN ms.stock_quantity <= ms.restock_threshold THEN 1 ELSE 0 END), 0) as low_stock_count, "
+        "COALESCE(SUM(CASE WHEN ms.stock_quantity <= ms.restock_threshold "
+        "THEN (ms.capacity - ms.stock_quantity) ELSE 0 END), 0) as products_needed, "
+        "COALESCE(SUM(ms.stock_quantity), 0) as total_stock, "
+        "COALESCE(SUM(ms.capacity), 0) as total_capacity, "
+        "COALESCE((SELECT SUM(total_amount_cents) FROM machine_sales s "
+        "WHERE s.machine_id = m.id AND DATE(s.created_at) = DATE('now','-1 day')), 0) as yesterday_sales "
+        "FROM machines m "
+        "LEFT JOIN machine_stock ms ON ms.machine_id = m.id "
+        "WHERE m.status != 'downtime' "
+        "GROUP BY m.id "
+        "HAVING m.priority_weight >= ? "
+        "ORDER BY "
+        "(CASE WHEN m.door_error = 1 OR m.temp_alert = 1 THEN 1 ELSE 0 END) DESC, "
+        "(CASE WHEN COALESCE(SUM(CASE WHEN ms.stock_quantity <= ms.restock_threshold THEN 1 ELSE 0 END), 0) > 0 THEN 1 ELSE 0 END) DESC, "
+        "(COALESCE(SUM(ms.capacity), 0) - COALESCE(SUM(ms.stock_quantity), 0)) DESC, "
+        "yesterday_sales DESC, "
+        "m.priority_weight DESC;";
+
+    if (sqlite3_prepare_v2(g_db, machines_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询补货机器失败");
+    }
+    sqlite3_bind_int(stmt, 1, min_priority);
+
+    json_t *machines = json_array();
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        int m_id = sqlite3_column_int(stmt, 0);
+        const char *m_code = safe_col_text(stmt, 1);
+        const char *m_loc = safe_col_text(stmt, 2);
+        const char *m_status = safe_col_text(stmt, 3);
+        int door_err = sqlite3_column_int(stmt, 4);
+        int temp_al = sqlite3_column_int(stmt, 5);
+        int p_weight = sqlite3_column_int(stmt, 6);
+        int low_stock = sqlite3_column_int(stmt, 8);
+        int products_needed = sqlite3_column_int(stmt, 9);
+        int total_stock = sqlite3_column_int(stmt, 10);
+        int total_capacity = sqlite3_column_int(stmt, 11);
+        int yest_sales = sqlite3_column_int(stmt, 12);
+
+        int stock_ratio = total_capacity > 0 ?
+            (int)((double)(total_capacity - total_stock) / total_capacity * 100) : 0;
+        int priority_score = p_weight;
+        if (door_err) priority_score += 30;
+        if (temp_al) priority_score += 25;
+        if (low_stock > 0) priority_score += 20;
+        priority_score += stock_ratio / 4;
+        if (yest_sales > 5000) priority_score += 15;
+
+        char reason[256] = {0};
+        int rlen = 0;
+        if (low_stock > 0) {
+            rlen += snprintf(reason + rlen, sizeof(reason) - rlen,
+                             "库存不足(%d种商品); ", low_stock);
+        }
+        if (door_err) {
+            rlen += snprintf(reason + rlen, sizeof(reason) - rlen, "柜门异常; ");
+        }
+        if (temp_al) {
+            rlen += snprintf(reason + rlen, sizeof(reason) - rlen, "温度告警; ");
+        }
+
+        json_t *m = json_object();
+        json_object_set_new(m, "machine_id", json_integer(m_id));
+        json_object_set_new(m, "machine_code", json_string(m_code));
+        json_object_set_new(m, "location", json_string(m_loc));
+        json_object_set_new(m, "status", json_string(m_status));
+        json_object_set_new(m, "door_error", json_integer(door_err));
+        json_object_set_new(m, "temp_alert", json_integer(temp_al));
+        json_object_set_new(m, "priority_weight", json_integer(p_weight));
+        json_object_set_new(m, "priority_score", json_integer(priority_score));
+        json_object_set_new(m, "low_stock_count", json_integer(low_stock));
+        json_object_set_new(m, "products_needed", json_integer(products_needed));
+        json_object_set_new(m, "stock_available", json_integer(total_stock));
+        json_object_set_new(m, "capacity", json_integer(total_capacity));
+        json_object_set_new(m, "yesterday_sales_cents", json_integer(yest_sales));
+        json_object_set_new(m, "reason", json_string(reason));
+        json_array_append_new(machines, m);
+    }
+    sqlite3_finalize(stmt);
+
+    if (max_machines > 0 && (int)json_array_size(machines) > max_machines) {
+        for (int i = max_machines; i < (int)json_array_size(machines); i++) {
+            json_array_remove(machines, i);
+        }
+    }
+
+    int total_machines = (int)json_array_size(machines);
+    if (total_machines == 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        json_t *data = json_object();
+        json_object_set_new(data, "route_date", json_string(route_date_copy));
+        json_object_set_new(data, "total_machines", json_integer(0));
+        json_object_set_new(data, "message", json_string("没有需要补货的机器"));
+        return respond_success(connection, MHD_HTTP_OK, data);
+    }
+
+    const char *ins_route =
+        "INSERT INTO replenishment_routes (route_date, operator_user_id, "
+        "total_machines, note) VALUES (?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(g_db, ins_route, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(machines);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "创建补货路线失败");
+    }
+    sqlite3_bind_text(stmt, 1, route_date_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 2, user.user_id);
+    sqlite3_bind_int(stmt, 3, total_machines);
+    sqlite3_bind_text(stmt, 4, "自动生成路线", -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(machines);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "创建补货路线失败");
+    }
+
+    int route_id = (int)sqlite3_last_insert_rowid(g_db);
+
+    const char *ins_item =
+        "INSERT INTO replenishment_route_items (route_id, machine_id, "
+        "priority_score, sort_order, low_stock_reason, door_error, "
+        "temp_alert, estimated_products_needed) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(g_db, ins_item, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(machines);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "创建路线项失败");
+    }
+
+    for (size_t i = 0; i < json_array_size(machines); i++) {
+        json_t *m = json_array_get(machines, i);
+        int m_id = json_integer_value(json_object_get(m, "machine_id"));
+        int score = json_integer_value(json_object_get(m, "priority_score"));
+        int products = json_integer_value(json_object_get(m, "products_needed"));
+        int door_err = json_integer_value(json_object_get(m, "door_error"));
+        int temp_al = json_integer_value(json_object_get(m, "temp_alert"));
+        const char *reason = json_string_value(json_object_get(m, "reason"));
+
+        sqlite3_bind_int(stmt, 1, route_id);
+        sqlite3_bind_int(stmt, 2, m_id);
+        sqlite3_bind_int(stmt, 3, score);
+        sqlite3_bind_int(stmt, 4, (int)i + 1);
+        sqlite3_bind_text(stmt, 5, reason, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 6, door_err);
+        sqlite3_bind_int(stmt, 7, temp_al);
+        sqlite3_bind_int(stmt, 8, products);
+        sqlite3_step(stmt);
+        sqlite3_reset(stmt);
+    }
+    sqlite3_finalize(stmt);
+
+    if (commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(machines);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交补货路线事务失败");
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    if (has_body && body != NULL) json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "route_id", json_integer(route_id));
+    json_object_set_new(data, "route_date", json_string(route_date_copy));
+    json_object_set_new(data, "total_machines", json_integer(total_machines));
+    json_object_set_new(data, "machines", machines);
+    return respond_success(connection, MHD_HTTP_CREATED, data);
+}
+
+static enum MHD_Result handle_replenishment_list(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *date =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "date");
+    const char *status =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "status");
+    const char *with_items =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "with_items");
+    int limit = parse_limit_query(connection);
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT r.id, r.route_date, r.status, r.total_machines, "
+        "r.completed_machines, r.note, u.username, r.created_at "
+        "FROM replenishment_routes r "
+        "LEFT JOIN users u ON u.id = r.operator_user_id ";
+
+    char sql[2048];
+    int use_date = 0, use_status = 0;
+    const char *date_val = NULL, *status_val = NULL;
+
+    if (date != NULL && *date != '\0' && strlen(date) == 10) {
+        use_date = 1; date_val = date;
+    }
+    if (status != NULL && *status != '\0' &&
+        (strcmp(status, "pending") == 0 || strcmp(status, "in_progress") == 0 ||
+         strcmp(status, "completed") == 0 || strcmp(status, "cancelled") == 0)) {
+        use_status = 1; status_val = status;
+    }
+
+    if (use_date || use_status) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_date) {
+            strcat(sql, "r.route_date = ? ");
+            first = 0;
+        }
+        if (use_status) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "r.status = ? ");
+        }
+        strcat(sql, "ORDER BY r.id DESC LIMIT ?;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY r.id DESC LIMIT ?;", sql_base);
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询补货路线失败");
+    }
+
+    int idx = 1;
+    if (use_date) sqlite3_bind_text(stmt, idx++, date_val, -1, SQLITE_TRANSIENT);
+    if (use_status) sqlite3_bind_text(stmt, idx++, status_val, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, idx, limit);
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *it = json_object();
+        int route_id = sqlite3_column_int(stmt, 0);
+        json_object_set_new(it, "id", json_integer(route_id));
+        json_object_set_new(it, "route_date", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(it, "status", json_string(safe_col_text(stmt, 2)));
+        json_object_set_new(it, "total_machines",
+                            json_integer(sqlite3_column_int(stmt, 3)));
+        json_object_set_new(it, "completed_machines",
+                            json_integer(sqlite3_column_int(stmt, 4)));
+        json_object_set_new(it, "note", json_string(safe_col_text(stmt, 5)));
+        json_object_set_new(it, "operator", json_string(safe_col_text(stmt, 6)));
+        json_object_set_new(it, "created_at", json_string(safe_col_text(stmt, 7)));
+
+        if (with_items != NULL && strcmp(with_items, "1") == 0) {
+            sqlite3_stmt *stmt2 = NULL;
+            const char *items_sql =
+                "SELECT ri.id, ri.sort_order, ri.priority_score, ri.status, "
+                "ri.low_stock_reason, ri.door_error, ri.temp_alert, "
+                "ri.estimated_products_needed, ri.actual_products_restocked, "
+                "ri.note, ri.completed_at, m.machine_code, m.location "
+                "FROM replenishment_route_items ri "
+                "JOIN machines m ON m.id = ri.machine_id "
+                "WHERE ri.route_id = ? ORDER BY ri.sort_order ASC;";
+            if (sqlite3_prepare_v2(g_db, items_sql, -1, &stmt2, NULL) == SQLITE_OK) {
+                sqlite3_bind_int(stmt2, 1, route_id);
+                json_t *route_items = json_array();
+                while (sqlite3_step(stmt2) == SQLITE_ROW) {
+                    json_t *ri = json_object();
+                    json_object_set_new(ri, "id",
+                                        json_integer(sqlite3_column_int(stmt2, 0)));
+                    json_object_set_new(ri, "sort_order",
+                                        json_integer(sqlite3_column_int(stmt2, 1)));
+                    json_object_set_new(ri, "priority_score",
+                                        json_integer(sqlite3_column_int(stmt2, 2)));
+                    json_object_set_new(ri, "status",
+                                        json_string(safe_col_text(stmt2, 3)));
+                    json_object_set_new(ri, "low_stock_reason",
+                                        json_string(safe_col_text(stmt2, 4)));
+                    json_object_set_new(ri, "door_error",
+                                        json_integer(sqlite3_column_int(stmt2, 5)));
+                    json_object_set_new(ri, "temp_alert",
+                                        json_integer(sqlite3_column_int(stmt2, 6)));
+                    json_object_set_new(ri, "estimated_products_needed",
+                                        json_integer(sqlite3_column_int(stmt2, 7)));
+                    json_object_set_new(ri, "actual_products_restocked",
+                                        json_integer(sqlite3_column_int(stmt2, 8)));
+                    json_object_set_new(ri, "note",
+                                        json_string(safe_col_text(stmt2, 9)));
+                    json_object_set_new(ri, "completed_at",
+                                        json_string(safe_col_text(stmt2, 10)));
+                    json_object_set_new(ri, "machine_code",
+                                        json_string(safe_col_text(stmt2, 11)));
+                    json_object_set_new(ri, "location",
+                                        json_string(safe_col_text(stmt2, 12)));
+                    json_array_append_new(route_items, ri);
+                }
+                sqlite3_finalize(stmt2);
+                json_object_set_new(it, "items", route_items);
+            }
+        }
+        json_array_append_new(items, it);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取补货路线失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
+static enum MHD_Result handle_replenishment_complete_item(struct MHD_Connection *connection,
+                                                           ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    int item_id = 0;
+    if (parse_int_field(body, "item_id", 1, 1000000, &item_id) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "item_id 必填且为正整数");
+    }
+
+    int actual_restocked = 0;
+    json_t *v = json_object_get(body, "actual_products_restocked");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) actual_restocked = (int)n;
+    }
+
+    const char *status = optional_string_field(body, "status", 16);
+    if (status == NULL) { status = "completed"; }
+    if (strcmp(status, "completed") != 0 && strcmp(status, "skipped") != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "status 仅支持 completed/skipped");
+    }
+
+    const char *note = optional_string_field(body, "note", 512);
+    if (note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "note 需为字符串");
+    }
+
+    char status_copy[17];
+    char note_copy[513];
+    snprintf(status_copy, sizeof(status_copy), "%s", status);
+    snprintf(note_copy, sizeof(note_copy), "%s", note != NULL ? note : "");
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int route_id = 0;
+    const char *find_sql = "SELECT route_id FROM replenishment_route_items WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, find_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询路线项失败");
+    }
+    sqlite3_bind_int(stmt, 1, item_id);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "路线项不存在");
+    }
+    route_id = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    const char *upd_item =
+        "UPDATE replenishment_route_items SET status = ?, "
+        "actual_products_restocked = ?, note = ?, "
+        "completed_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_item, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新路线项失败");
+    }
+    sqlite3_bind_text(stmt, 1, status_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 2, actual_restocked);
+    sqlite3_bind_text(stmt, 3, note_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 4, item_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    int completed = 0;
+    int total = 0;
+    const char *count_sql =
+        "SELECT COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0), "
+        "COUNT(*) FROM replenishment_route_items WHERE route_id = ?;";
+    if (sqlite3_prepare_v2(g_db, count_sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, route_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            completed = sqlite3_column_int(stmt, 0);
+            total = sqlite3_column_int(stmt, 1);
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    const char *route_status = (completed >= total && total > 0) ? "completed" : "in_progress";
+    const char *upd_route =
+        "UPDATE replenishment_routes SET status = ?, completed_machines = ?, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_route, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新路线状态失败");
+    }
+    sqlite3_bind_text(stmt, 1, route_status, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 2, completed);
+    sqlite3_bind_int(stmt, 3, route_id);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE || commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交事务失败");
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "item_id", json_integer(item_id));
+    json_object_set_new(data, "status", json_string(status_copy));
+    json_object_set_new(data, "actual_products_restocked", json_integer(actual_restocked));
+    json_object_set_new(data, "route_status", json_string(route_status));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_daily_report_generate(struct MHD_Connection *connection,
+                                                     ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    int has_body = (parse_json_body(ci, &body, err) == 0);
+
+    const char *report_date = NULL;
+    if (has_body && body != NULL) {
+        report_date = optional_string_field(body, "report_date", 10);
+    }
+
+    char date_buf[16] = {0};
+    if (report_date == NULL || *report_date == '\0') {
+        time_t t = now_epoch();
+        struct tm *tm_info = localtime(&t);
+        strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", tm_info);
+        report_date = date_buf;
+    }
+
+    char report_date_copy[16];
+    snprintf(report_date_copy, sizeof(report_date_copy), "%s", report_date);
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (begin_transaction() != 0) {
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "开启事务失败");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int existing_id = 0;
+    const char *check_sql =
+        "SELECT id FROM daily_reports WHERE report_date = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, check_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "检查已有日报失败");
+    }
+    sqlite3_bind_text(stmt, 1, report_date_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) existing_id = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    int total_sales = 0, cash_sales = 0, scan_sales = 0, other_sales = 0;
+    int total_trans = 0, total_qty = 0;
+    const char *sales_sql =
+        "SELECT COALESCE(SUM(total_amount_cents), 0), "
+        "COALESCE(SUM(CASE WHEN payment_method='cash' THEN total_amount_cents ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN payment_method='scan' THEN total_amount_cents ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN payment_method='other' THEN total_amount_cents ELSE 0 END), 0), "
+        "COUNT(*), COALESCE(SUM(quantity), 0) "
+        "FROM machine_sales WHERE DATE(created_at) = ?;";
+    if (sqlite3_prepare_v2(g_db, sales_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "统计销售数据失败");
+    }
+    sqlite3_bind_text(stmt, 1, report_date_copy, -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        total_sales = sqlite3_column_int(stmt, 0);
+        cash_sales = sqlite3_column_int(stmt, 1);
+        scan_sales = sqlite3_column_int(stmt, 2);
+        other_sales = sqlite3_column_int(stmt, 3);
+        total_trans = sqlite3_column_int(stmt, 4);
+        total_qty = sqlite3_column_int(stmt, 5);
+    }
+    sqlite3_finalize(stmt);
+
+    int downtime_loss = 0, downtime_min = 0;
+    const char *dt_sql =
+        "SELECT COALESCE(SUM(CASE WHEN duration_minutes IS NOT NULL "
+        "THEN estimated_loss_cents ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN duration_minutes IS NOT NULL "
+        "THEN duration_minutes ELSE 0 END), 0) "
+        "FROM machine_downtime WHERE DATE(start_time) = ? AND resolved = 1;";
+    if (sqlite3_prepare_v2(g_db, dt_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "统计停机损失失败");
+    }
+    sqlite3_bind_text(stmt, 1, report_date_copy, -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        downtime_loss = sqlite3_column_int(stmt, 0);
+        downtime_min = sqlite3_column_int(stmt, 1);
+    }
+    sqlite3_finalize(stmt);
+
+    int online = 0, offline = 0, downtime_cnt = 0, door_err = 0, temp_al = 0;
+    const char *mach_sql =
+        "SELECT "
+        "COALESCE(SUM(CASE WHEN status='online' THEN 1 ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN status='offline' THEN 1 ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN status='downtime' THEN 1 ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN door_error=1 THEN 1 ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN temp_alert=1 THEN 1 ELSE 0 END), 0) "
+        "FROM machines;";
+    if (sqlite3_prepare_v2(g_db, mach_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "统计机器状态失败");
+    }
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        online = sqlite3_column_int(stmt, 0);
+        offline = sqlite3_column_int(stmt, 1);
+        downtime_cnt = sqlite3_column_int(stmt, 2);
+        door_err = sqlite3_column_int(stmt, 3);
+        temp_al = sqlite3_column_int(stmt, 4);
+    }
+    sqlite3_finalize(stmt);
+
+    if (existing_id > 0) {
+        const char *upd_sql =
+            "UPDATE daily_reports SET total_sales_cents = ?, cash_sales_cents = ?, "
+            "scan_sales_cents = ?, other_sales_cents = ?, total_transactions = ?, "
+            "total_quantity_sold = ?, total_downtime_loss_cents = ?, "
+            "total_downtime_minutes = ?, expected_cash_cents = ?, "
+            "expected_scan_cents = ?, machines_online = ?, machines_offline = ?, "
+            "machines_in_downtime = ?, machines_with_door_errors = ?, "
+            "machines_with_temp_alerts = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?;";
+        if (sqlite3_prepare_v2(g_db, upd_sql, -1, &stmt, NULL) != SQLITE_OK) {
+            rollback_transaction();
+            pthread_mutex_unlock(&g_db_mutex);
+            if (has_body && body != NULL) json_decref(body);
+            return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                                "DB_ERROR", "更新日报失败");
+        }
+        sqlite3_bind_int(stmt, 1, total_sales);
+        sqlite3_bind_int(stmt, 2, cash_sales);
+        sqlite3_bind_int(stmt, 3, scan_sales);
+        sqlite3_bind_int(stmt, 4, other_sales);
+        sqlite3_bind_int(stmt, 5, total_trans);
+        sqlite3_bind_int(stmt, 6, total_qty);
+        sqlite3_bind_int(stmt, 7, downtime_loss);
+        sqlite3_bind_int(stmt, 8, downtime_min);
+        sqlite3_bind_int(stmt, 9, cash_sales);
+        sqlite3_bind_int(stmt, 10, scan_sales);
+        sqlite3_bind_int(stmt, 11, online);
+        sqlite3_bind_int(stmt, 12, offline);
+        sqlite3_bind_int(stmt, 13, downtime_cnt);
+        sqlite3_bind_int(stmt, 14, door_err);
+        sqlite3_bind_int(stmt, 15, temp_al);
+        sqlite3_bind_int(stmt, 16, existing_id);
+        rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    } else {
+        const char *ins_sql =
+            "INSERT INTO daily_reports (report_date, total_sales_cents, "
+            "cash_sales_cents, scan_sales_cents, other_sales_cents, "
+            "total_transactions, total_quantity_sold, total_downtime_loss_cents, "
+            "total_downtime_minutes, expected_cash_cents, expected_scan_cents, "
+            "machines_online, machines_offline, machines_in_downtime, "
+            "machines_with_door_errors, machines_with_temp_alerts, operator_user_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+        if (sqlite3_prepare_v2(g_db, ins_sql, -1, &stmt, NULL) != SQLITE_OK) {
+            rollback_transaction();
+            pthread_mutex_unlock(&g_db_mutex);
+            if (has_body && body != NULL) json_decref(body);
+            return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                                "DB_ERROR", "创建日报失败");
+        }
+        sqlite3_bind_text(stmt, 1, report_date_copy, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, total_sales);
+        sqlite3_bind_int(stmt, 3, cash_sales);
+        sqlite3_bind_int(stmt, 4, scan_sales);
+        sqlite3_bind_int(stmt, 5, other_sales);
+        sqlite3_bind_int(stmt, 6, total_trans);
+        sqlite3_bind_int(stmt, 7, total_qty);
+        sqlite3_bind_int(stmt, 8, downtime_loss);
+        sqlite3_bind_int(stmt, 9, downtime_min);
+        sqlite3_bind_int(stmt, 10, cash_sales);
+        sqlite3_bind_int(stmt, 11, scan_sales);
+        sqlite3_bind_int(stmt, 12, online);
+        sqlite3_bind_int(stmt, 13, offline);
+        sqlite3_bind_int(stmt, 14, downtime_cnt);
+        sqlite3_bind_int(stmt, 15, door_err);
+        sqlite3_bind_int(stmt, 16, temp_al);
+        sqlite3_bind_int(stmt, 17, user.user_id);
+        rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        existing_id = (int)sqlite3_last_insert_rowid(g_db);
+    }
+
+    if (rc != SQLITE_DONE || commit_transaction() != 0) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        if (has_body && body != NULL) json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "提交日报事务失败");
+    }
+
+    pthread_mutex_unlock(&g_db_mutex);
+    if (has_body && body != NULL) json_decref(body);
+
+    json_t *data = json_object();
+    json_object_set_new(data, "report_id", json_integer(existing_id));
+    json_object_set_new(data, "report_date", json_string(report_date_copy));
+    json_object_set_new(data, "total_sales_cents", json_integer(total_sales));
+    json_object_set_new(data, "cash_sales_cents", json_integer(cash_sales));
+    json_object_set_new(data, "scan_sales_cents", json_integer(scan_sales));
+    json_object_set_new(data, "other_sales_cents", json_integer(other_sales));
+    json_object_set_new(data, "total_transactions", json_integer(total_trans));
+    json_object_set_new(data, "total_quantity_sold", json_integer(total_qty));
+    json_object_set_new(data, "total_downtime_loss_cents", json_integer(downtime_loss));
+    json_object_set_new(data, "total_downtime_minutes", json_integer(downtime_min));
+    json_object_set_new(data, "machines_online", json_integer(online));
+    json_object_set_new(data, "machines_offline", json_integer(offline));
+    json_object_set_new(data, "machines_in_downtime", json_integer(downtime_cnt));
+    json_object_set_new(data, "machines_with_door_errors", json_integer(door_err));
+    json_object_set_new(data, "machines_with_temp_alerts", json_integer(temp_al));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_daily_report_list(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *date =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "date");
+    const char *reconciled =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "reconciled");
+    int limit = parse_limit_query(connection);
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT r.id, r.report_date, r.total_sales_cents, r.cash_sales_cents, "
+        "r.scan_sales_cents, r.other_sales_cents, r.total_transactions, "
+        "r.total_quantity_sold, r.total_downtime_loss_cents, "
+        "r.total_downtime_minutes, r.expected_cash_cents, r.actual_cash_cents, "
+        "r.cash_difference_cents, r.expected_scan_cents, r.actual_scan_cents, "
+        "r.scan_difference_cents, r.total_discrepancy_cents, r.discrepancy_note, "
+        "r.machines_online, r.machines_offline, r.machines_in_downtime, "
+        "r.machines_with_door_errors, r.machines_with_temp_alerts, "
+        "r.reconciled, r.reconciled_at, u.username, r.note, r.created_at "
+        "FROM daily_reports r LEFT JOIN users u ON u.id = r.operator_user_id ";
+
+    char sql[2048];
+    int use_date = 0, use_reconciled = 0;
+    const char *date_val = NULL;
+    int reconciled_val = -1;
+
+    if (date != NULL && *date != '\0' && strlen(date) == 10) {
+        use_date = 1; date_val = date;
+    }
+    if (reconciled != NULL && *reconciled != '\0') {
+        if (strcmp(reconciled, "0") == 0 || strcmp(reconciled, "1") == 0) {
+            use_reconciled = 1;
+            reconciled_val = strcmp(reconciled, "1") == 0 ? 1 : 0;
+        }
+    }
+
+    if (use_date || use_reconciled) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_date) {
+            strcat(sql, "r.report_date = ? ");
+            first = 0;
+        }
+        if (use_reconciled) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "r.reconciled = ? ");
+        }
+        strcat(sql, "ORDER BY r.id DESC LIMIT ?;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY r.id DESC LIMIT ?;", sql_base);
+    }
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询日报失败");
+    }
+
+    int idx = 1;
+    if (use_date) sqlite3_bind_text(stmt, idx++, date_val, -1, SQLITE_TRANSIENT);
+    if (use_reconciled) sqlite3_bind_int(stmt, idx++, reconciled_val);
+    sqlite3_bind_int(stmt, idx, limit);
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *it = json_object();
+        json_object_set_new(it, "id", json_integer(sqlite3_column_int(stmt, 0)));
+        json_object_set_new(it, "report_date", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(it, "total_sales_cents",
+                            json_integer(sqlite3_column_int(stmt, 2)));
+        json_object_set_new(it, "cash_sales_cents",
+                            json_integer(sqlite3_column_int(stmt, 3)));
+        json_object_set_new(it, "scan_sales_cents",
+                            json_integer(sqlite3_column_int(stmt, 4)));
+        json_object_set_new(it, "other_sales_cents",
+                            json_integer(sqlite3_column_int(stmt, 5)));
+        json_object_set_new(it, "total_transactions",
+                            json_integer(sqlite3_column_int(stmt, 6)));
+        json_object_set_new(it, "total_quantity_sold",
+                            json_integer(sqlite3_column_int(stmt, 7)));
+        json_object_set_new(it, "total_downtime_loss_cents",
+                            json_integer(sqlite3_column_int(stmt, 8)));
+        json_object_set_new(it, "total_downtime_minutes",
+                            json_integer(sqlite3_column_int(stmt, 9)));
+        json_object_set_new(it, "expected_cash_cents",
+                            json_integer(sqlite3_column_int(stmt, 10)));
+        json_object_set_new(it, "actual_cash_cents",
+                            json_integer(sqlite3_column_int(stmt, 11)));
+        json_object_set_new(it, "cash_difference_cents",
+                            json_integer(sqlite3_column_int(stmt, 12)));
+        json_object_set_new(it, "expected_scan_cents",
+                            json_integer(sqlite3_column_int(stmt, 13)));
+        json_object_set_new(it, "actual_scan_cents",
+                            json_integer(sqlite3_column_int(stmt, 14)));
+        json_object_set_new(it, "scan_difference_cents",
+                            json_integer(sqlite3_column_int(stmt, 15)));
+        json_object_set_new(it, "total_discrepancy_cents",
+                            json_integer(sqlite3_column_int(stmt, 16)));
+        json_object_set_new(it, "discrepancy_note",
+                            json_string(safe_col_text(stmt, 17)));
+        json_object_set_new(it, "machines_online",
+                            json_integer(sqlite3_column_int(stmt, 18)));
+        json_object_set_new(it, "machines_offline",
+                            json_integer(sqlite3_column_int(stmt, 19)));
+        json_object_set_new(it, "machines_in_downtime",
+                            json_integer(sqlite3_column_int(stmt, 20)));
+        json_object_set_new(it, "machines_with_door_errors",
+                            json_integer(sqlite3_column_int(stmt, 21)));
+        json_object_set_new(it, "machines_with_temp_alerts",
+                            json_integer(sqlite3_column_int(stmt, 22)));
+        json_object_set_new(it, "reconciled",
+                            json_integer(sqlite3_column_int(stmt, 23)));
+        json_object_set_new(it, "reconciled_at",
+                            json_string(safe_col_text(stmt, 24)));
+        json_object_set_new(it, "operator",
+                            json_string(safe_col_text(stmt, 25)));
+        json_object_set_new(it, "note",
+                            json_string(safe_col_text(stmt, 26)));
+        json_object_set_new(it, "created_at",
+                            json_string(safe_col_text(stmt, 27)));
+        json_array_append_new(items, it);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取日报失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
+static enum MHD_Result handle_daily_report_reconcile(struct MHD_Connection *connection,
+                                                  ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *report_date = NULL;
+    if (require_string_field(body, "report_date", 10, &report_date) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "report_date 必填且格式为YYYY-MM-DD");
+    }
+
+    int actual_cash = 0, actual_scan = 0;
+    if (parse_int_field(body, "actual_cash_cents", 0, 1000000000, &actual_cash) != 0 ||
+        parse_int_field(body, "actual_scan_cents", 0, 1000000000, &actual_scan) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "actual_cash_cents/actual_scan_cents 必须为合法整数");
+    }
+
+    const char *discrepancy_note = optional_string_field(body, "discrepancy_note", 1024);
+    const char *note = optional_string_field(body, "note", 1024);
+    if (discrepancy_note == NULL || note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "discrepancy_note/note 需为字符串");
+    }
+
+    char report_date_copy[16];
+    char discrepancy_copy[1025];
+    char note_copy[1025];
+    snprintf(report_date_copy, sizeof(report_date_copy), "%s", report_date);
+    snprintf(discrepancy_copy, sizeof(discrepancy_copy), "%s",
+             discrepancy_note != NULL ? discrepancy_note : "");
+    snprintf(note_copy, sizeof(note_copy), "%s", note != NULL ? note : "");
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    if (!is_admin_role(&user)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_FORBIDDEN, "FORBIDDEN",
+                            "仅管理员可对账");
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    int expected_cash = 0, expected_scan = 0;
+    const char *find_sql =
+        "SELECT id, expected_cash_cents, expected_scan_cents, reconciled "
+        "FROM daily_reports WHERE report_date = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询日报失败");
+    }
+    sqlite3_bind_text(stmt, 1, report_date_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_NOT_FOUND, "NOT_FOUND",
+                            "日报不存在，请先生成日报");
+    }
+    int report_id = sqlite3_column_int(stmt, 0);
+    expected_cash = sqlite3_column_int(stmt, 1);
+    expected_scan = sqlite3_column_int(stmt, 2);
+    int already_reconciled = sqlite3_column_int(stmt, 3);
+    sqlite3_finalize(stmt);
+
+    if (already_reconciled) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_CONFLICT, "ALREADY_RECONCILED",
+                            "该日报已对账");
+    }
+
+    int cash_diff = actual_cash - expected_cash;
+    int scan_diff = actual_scan - expected_scan;
+    int total_diff = cash_diff + scan_diff;
+
+    const char *upd_sql =
+        "UPDATE daily_reports SET actual_cash_cents = ?, cash_difference_cents = ?, "
+        "actual_scan_cents = ?, scan_difference_cents = ?, "
+        "total_discrepancy_cents = ?, discrepancy_note = ?, note = ?, "
+        "reconciled = 1, reconciled_at = CURRENT_TIMESTAMP, "
+        "operator_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "更新日报失败");
+    }
+    sqlite3_bind_int(stmt, 1, actual_cash);
+    sqlite3_bind_int(stmt, 2, cash_diff);
+    sqlite3_bind_int(stmt, 3, actual_scan);
+    sqlite3_bind_int(stmt, 4, scan_diff);
+    sqlite3_bind_int(stmt, 5, total_diff);
+    sqlite3_bind_text(stmt, 6, discrepancy_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 7, note_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 8, user.user_id);
+    sqlite3_bind_int(stmt, 9, report_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    if (rc != SQLITE_DONE) {
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "对账失败");
+    }
+
+    json_t *data = json_object();
+    json_object_set_new(data, "report_id", json_integer(report_id));
+    json_object_set_new(data, "report_date", json_string(report_date_copy));
+    json_object_set_new(data, "expected_cash_cents", json_integer(expected_cash));
+    json_object_set_new(data, "actual_cash_cents", json_integer(actual_cash));
+    json_object_set_new(data, "cash_difference_cents", json_integer(cash_diff));
+    json_object_set_new(data, "expected_scan_cents", json_integer(expected_scan));
+    json_object_set_new(data, "actual_scan_cents", json_integer(actual_scan));
+    json_object_set_new(data, "scan_difference_cents", json_integer(scan_diff));
+    json_object_set_new(data, "total_discrepancy_cents", json_integer(total_diff));
+    json_object_set_new(data, "reconciled", json_integer(1));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_shift_reconcile(struct MHD_Connection *connection,
+                                             ConnectionInfo *ci) {
+    char err[256];
+    json_t *body = NULL;
+    if (parse_json_body(ci, &body, err) != 0) {
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_JSON", err);
+    }
+
+    const char *shift_date = NULL;
+    const char *shift_type = NULL;
+    if (require_string_field(body, "shift_date", 10, &shift_date) != 0 ||
+        require_string_field(body, "shift_type", 16, &shift_type) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "shift_date/shift_type 必填");
+    }
+
+    if (strcmp(shift_type, "morning") != 0 && strcmp(shift_type, "afternoon") != 0 &&
+        strcmp(shift_type, "evening") != 0 && strcmp(shift_type, "night") != 0 &&
+        strcmp(shift_type, "daily") != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "shift_type 仅支持 morning/afternoon/evening/night/daily");
+    }
+
+    int actual_cash = 0, actual_scan = 0, actual_other = 0;
+    if (parse_int_field(body, "actual_cash_cents", 0, 1000000000, &actual_cash) != 0 ||
+        parse_int_field(body, "actual_scan_cents", 0, 1000000000, &actual_scan) != 0) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "actual_cash_cents/actual_scan_cents 必须为合法整数");
+    }
+
+    json_t *v = json_object_get(body, "actual_other_cents");
+    if (json_is_integer(v)) {
+        json_int_t n = json_integer_value(v);
+        if (n >= 0) actual_other = (int)n;
+    }
+
+    const char *discrepancy_reason = optional_string_field(body, "discrepancy_reason", 1024);
+    const char *note = optional_string_field(body, "note", 1024);
+    if (discrepancy_reason == NULL || note == NULL) {
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
+                            "discrepancy_reason/note 需为字符串");
+    }
+
+    char shift_date_copy[16];
+    char shift_type_copy[17];
+    char dr_copy[1025];
+    char note_copy[1025];
+    snprintf(shift_date_copy, sizeof(shift_date_copy), "%s", shift_date);
+    snprintf(shift_type_copy, sizeof(shift_type_copy), "%s", shift_type);
+    snprintf(dr_copy, sizeof(dr_copy), "%s",
+             discrepancy_reason != NULL ? discrepancy_reason : "");
+    snprintf(note_copy, sizeof(note_copy), "%s", note != NULL ? note : "");
+
+    pthread_mutex_lock(&g_db_mutex);
+
+    AuthUser user;
+    char token_hash[TOKEN_HASH_HEX_LEN + 1] = {0};
+    if (!authenticate_request(connection, &user, token_hash)) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_UNAUTHORIZED, "UNAUTHORIZED",
+                            "需要登录");
+    }
+
+    int expected_cash = 0, expected_scan = 0, expected_other = 0;
+    sqlite3_stmt *stmt = NULL;
+    const char *sum_sql =
+        "SELECT "
+        "COALESCE(SUM(CASE WHEN payment_method='cash' THEN total_amount_cents ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN payment_method='scan' THEN total_amount_cents ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN payment_method='other' THEN total_amount_cents ELSE 0 END), 0) "
+        "FROM machine_sales WHERE DATE(created_at) = ?;";
+    if (sqlite3_prepare_v2(g_db, sum_sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, shift_date_copy, -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            expected_cash = sqlite3_column_int(stmt, 0);
+            expected_scan = sqlite3_column_int(stmt, 1);
+            expected_other = sqlite3_column_int(stmt, 2);
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    int cash_diff = actual_cash - expected_cash;
+    int scan_diff = actual_scan - expected_scan;
+    int other_diff = actual_other - expected_other;
+    int total_diff = cash_diff + scan_diff + other_diff;
+
+    const char *ins_sql =
+        "INSERT INTO shift_reconciliations (shift_date, shift_type, operator_user_id, "
+        "expected_cash_cents, actual_cash_cents, cash_difference_cents, "
+        "expected_scan_cents, actual_scan_cents, scan_difference_cents, "
+        "expected_other_cents, actual_other_cents, other_difference_cents, "
+        "total_discrepancy_cents, discrepancy_reason, note) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(g_db, ins_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "创建收班对账失败");
+    }
+    sqlite3_bind_text(stmt, 1, shift_date_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, shift_type_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 3, user.user_id);
+    sqlite3_bind_int(stmt, 4, expected_cash);
+    sqlite3_bind_int(stmt, 5, actual_cash);
+    sqlite3_bind_int(stmt, 6, cash_diff);
+    sqlite3_bind_int(stmt, 7, expected_scan);
+    sqlite3_bind_int(stmt, 8, actual_scan);
+    sqlite3_bind_int(stmt, 9, scan_diff);
+    sqlite3_bind_int(stmt, 10, expected_other);
+    sqlite3_bind_int(stmt, 11, actual_other);
+    sqlite3_bind_int(stmt, 12, other_diff);
+    sqlite3_bind_int(stmt, 13, total_diff);
+    sqlite3_bind_text(stmt, 14, dr_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 15, note_copy, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    int rec_id = (int)sqlite3_last_insert_rowid(g_db);
+    sqlite3_finalize(stmt);
+
+    pthread_mutex_unlock(&g_db_mutex);
+    json_decref(body);
+
+    if (rc != SQLITE_DONE) {
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "收班对账失败");
+    }
+
+    json_t *data = json_object();
+    json_object_set_new(data, "reconciliation_id", json_integer(rec_id));
+    json_object_set_new(data, "shift_date", json_string(shift_date_copy));
+    json_object_set_new(data, "shift_type", json_string(shift_type_copy));
+    json_object_set_new(data, "expected_cash_cents", json_integer(expected_cash));
+    json_object_set_new(data, "actual_cash_cents", json_integer(actual_cash));
+    json_object_set_new(data, "cash_difference_cents", json_integer(cash_diff));
+    json_object_set_new(data, "expected_scan_cents", json_integer(expected_scan));
+    json_object_set_new(data, "actual_scan_cents", json_integer(actual_scan));
+    json_object_set_new(data, "scan_difference_cents", json_integer(scan_diff));
+    json_object_set_new(data, "expected_other_cents", json_integer(expected_other));
+    json_object_set_new(data, "actual_other_cents", json_integer(actual_other));
+    json_object_set_new(data, "other_difference_cents", json_integer(other_diff));
+    json_object_set_new(data, "total_discrepancy_cents", json_integer(total_diff));
+    return respond_success(connection, MHD_HTTP_OK, data);
+}
+
+static enum MHD_Result handle_shift_reconciliation_list(struct MHD_Connection *connection) {
+    pthread_mutex_lock(&g_db_mutex);
+
+    const char *date =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "date");
+    const char *shift_type =
+        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "shift_type");
+    int limit = parse_limit_query(connection);
+
+    sqlite3_stmt *stmt = NULL;
+    const char *sql_base =
+        "SELECT s.id, s.shift_date, s.shift_type, s.expected_cash_cents, "
+        "s.actual_cash_cents, s.cash_difference_cents, s.expected_scan_cents, "
+        "s.actual_scan_cents, s.scan_difference_cents, s.expected_other_cents, "
+        "s.actual_other_cents, s.other_difference_cents, s.total_discrepancy_cents, "
+        "s.discrepancy_reason, s.note, u.username, s.created_at "
+        "FROM shift_reconciliations s "
+        "JOIN users u ON u.id = s.operator_user_id ";
+
+    char sql[2048];
+    int use_date = 0, use_type = 0;
+    const char *date_val = NULL, *type_val = NULL;
+
+    if (date != NULL && *date != '\0' && strlen(date) == 10) {
+        use_date = 1; date_val = date;
+    }
+    if (shift_type != NULL && *shift_type != '\0' &&
+        (strcmp(shift_type, "morning") == 0 || strcmp(shift_type, "afternoon") == 0 ||
+        strcmp(shift_type, "evening") == 0 || strcmp(shift_type, "night") == 0 ||
+        strcmp(shift_type, "daily") == 0)) {
+        use_type = 1; type_val = shift_type;
+    }
+
+    if (use_date || use_type) {
+        strcpy(sql, sql_base);
+        strcat(sql, "WHERE ");
+        int first = 1;
+        if (use_date) {
+            strcat(sql, "s.shift_date = ? ");
+            first = 0;
+        }
+        if (use_type) {
+            if (!first) strcat(sql, "AND ");
+            strcat(sql, "s.shift_type = ? ");
+        }
+        strcat(sql, "ORDER BY s.id DESC LIMIT ?;");
+    } else {
+        snprintf(sql, sizeof(sql),
+                 "%s ORDER BY s.id DESC LIMIT ?;", sql_base);
+    }
+
+    int idx = 1;
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&g_db_mutex);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询收班对账失败");
+    }
+
+    if (use_date) sqlite3_bind_text(stmt, idx++, date_val, -1, SQLITE_TRANSIENT);
+    if (use_type) sqlite3_bind_text(stmt, idx++, type_val, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, idx, limit);
+
+    json_t *items = json_array();
+    int rc = SQLITE_OK;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        json_t *it = json_object();
+        json_object_set_new(it, "id", json_integer(sqlite3_column_int(stmt, 0)));
+        json_object_set_new(it, "shift_date", json_string(safe_col_text(stmt, 1)));
+        json_object_set_new(it, "shift_type", json_string(safe_col_text(stmt, 2)));
+        json_object_set_new(it, "expected_cash_cents",
+                            json_integer(sqlite3_column_int(stmt, 3)));
+        json_object_set_new(it, "actual_cash_cents",
+                            json_integer(sqlite3_column_int(stmt, 4)));
+        json_object_set_new(it, "cash_difference_cents",
+                            json_integer(sqlite3_column_int(stmt, 5)));
+        json_object_set_new(it, "expected_scan_cents",
+                            json_integer(sqlite3_column_int(stmt, 6)));
+        json_object_set_new(it, "actual_scan_cents",
+                            json_integer(sqlite3_column_int(stmt, 7)));
+        json_object_set_new(it, "scan_difference_cents",
+                            json_integer(sqlite3_column_int(stmt, 8)));
+        json_object_set_new(it, "expected_other_cents",
+                            json_integer(sqlite3_column_int(stmt, 9)));
+        json_object_set_new(it, "actual_other_cents",
+                            json_integer(sqlite3_column_int(stmt, 10)));
+        json_object_set_new(it, "other_difference_cents",
+                            json_integer(sqlite3_column_int(stmt, 11)));
+        json_object_set_new(it, "total_discrepancy_cents",
+                            json_integer(sqlite3_column_int(stmt, 12)));
+        json_object_set_new(it, "discrepancy_reason",
+                            json_string(safe_col_text(stmt, 13)));
+        json_object_set_new(it, "note",
+                            json_string(safe_col_text(stmt, 14)));
+        json_object_set_new(it, "operator",
+                            json_string(safe_col_text(stmt, 15)));
+        json_object_set_new(it, "created_at",
+                            json_string(safe_col_text(stmt, 16)));
+        json_array_append_new(items, it);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&g_db_mutex);
+
+    if (rc != SQLITE_DONE) {
+        json_decref(items);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "读取收班对账失败");
+    }
+
+    return respond_success(connection, MHD_HTTP_OK, items);
+}
+
 static enum MHD_Result route_health(struct MHD_Connection *connection,
                                     ConnectionInfo *ci) {
     (void)ci;
@@ -1813,6 +4903,108 @@ static enum MHD_Result route_swagger_ui(struct MHD_Connection *connection,
     return docs_send_swagger_ui(connection);
 }
 
+static enum MHD_Result route_create_machine(struct MHD_Connection *connection,
+                                            ConnectionInfo *ci) {
+    return handle_create_machine(connection, ci);
+}
+
+static enum MHD_Result route_list_machines(struct MHD_Connection *connection,
+                                           ConnectionInfo *ci) {
+    (void)ci;
+    return handle_list_machines(connection);
+}
+
+static enum MHD_Result route_update_machine(struct MHD_Connection *connection,
+                                            ConnectionInfo *ci) {
+    return handle_update_machine(connection, ci);
+}
+
+static enum MHD_Result route_delete_machine(struct MHD_Connection *connection,
+                                            ConnectionInfo *ci) {
+    return handle_delete_machine(connection, ci);
+}
+
+static enum MHD_Result route_machine_stock_add(struct MHD_Connection *connection,
+                                               ConnectionInfo *ci) {
+    return handle_machine_stock_add(connection, ci);
+}
+
+static enum MHD_Result route_machine_stock_list(struct MHD_Connection *connection,
+                                                ConnectionInfo *ci) {
+    (void)ci;
+    return handle_machine_stock_list(connection);
+}
+
+static enum MHD_Result route_machine_sale(struct MHD_Connection *connection,
+                                          ConnectionInfo *ci) {
+    return handle_machine_sale(connection, ci);
+}
+
+static enum MHD_Result route_machine_sales_list(struct MHD_Connection *connection,
+                                                ConnectionInfo *ci) {
+    (void)ci;
+    return handle_machine_sales_list(connection);
+}
+
+static enum MHD_Result route_downtime_start(struct MHD_Connection *connection,
+                                            ConnectionInfo *ci) {
+    return handle_downtime_start(connection, ci);
+}
+
+static enum MHD_Result route_downtime_end(struct MHD_Connection *connection,
+                                          ConnectionInfo *ci) {
+    return handle_downtime_end(connection, ci);
+}
+
+static enum MHD_Result route_downtime_list(struct MHD_Connection *connection,
+                                           ConnectionInfo *ci) {
+    (void)ci;
+    return handle_downtime_list(connection);
+}
+
+static enum MHD_Result route_replenishment_generate(struct MHD_Connection *connection,
+                                                    ConnectionInfo *ci) {
+    return handle_replenishment_generate(connection, ci);
+}
+
+static enum MHD_Result route_replenishment_list(struct MHD_Connection *connection,
+                                                ConnectionInfo *ci) {
+    (void)ci;
+    return handle_replenishment_list(connection);
+}
+
+static enum MHD_Result route_replenishment_complete_item(struct MHD_Connection *connection,
+                                                         ConnectionInfo *ci) {
+    return handle_replenishment_complete_item(connection, ci);
+}
+
+static enum MHD_Result route_daily_report_generate(struct MHD_Connection *connection,
+                                                   ConnectionInfo *ci) {
+    return handle_daily_report_generate(connection, ci);
+}
+
+static enum MHD_Result route_daily_report_list(struct MHD_Connection *connection,
+                                               ConnectionInfo *ci) {
+    (void)ci;
+    return handle_daily_report_list(connection);
+}
+
+static enum MHD_Result route_daily_report_reconcile(struct MHD_Connection *connection,
+                                                    ConnectionInfo *ci) {
+    return handle_daily_report_reconcile(connection, ci);
+}
+
+static enum MHD_Result route_shift_reconcile(struct MHD_Connection *connection,
+                                             ConnectionInfo *ci) {
+    return handle_shift_reconcile(connection, ci);
+}
+
+static enum MHD_Result route_shift_reconciliation_list(struct MHD_Connection *connection,
+                                                       ConnectionInfo *ci) {
+    (void)ci;
+    return handle_shift_reconciliation_list(connection);
+}
+
 static enum MHD_Result route_home(struct MHD_Connection *connection,
                                   ConnectionInfo *ci) {
     (void)ci;
@@ -1847,6 +5039,44 @@ static const ApiRoute g_api_routes[] = {
      "OpenAPI Document", "自动生成的 OpenAPI 文档", "System", 0, 0, 1},
     {MHD_HTTP_METHOD_GET, "/docs", route_swagger_ui, "Swagger UI",
      "Swagger 交互式文档页面", "System", 0, 0, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/machines", route_create_machine,
+     "Create Machine", "新增售货机（管理员）", "Machine", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/machines", route_list_machines,
+     "List Machines", "查询售货机列表，支持状态/异常过滤", "Machine", 1, 0, 1},
+    {MHD_HTTP_METHOD_PUT, "/api/v1/machines", route_update_machine,
+     "Update Machine", "更新售货机信息", "Machine", 1, 1, 1},
+    {MHD_HTTP_METHOD_DELETE, "/api/v1/machines", route_delete_machine,
+     "Delete Machine", "删除售货机（管理员）", "Machine", 1, 1, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/machines/stock/add", route_machine_stock_add,
+     "Machine Stock Add", "售货机补货入库", "Machine", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/machines/stock", route_machine_stock_list,
+     "Machine Stock List", "查询售货机库存，支持低库存过滤", "Machine", 1, 0, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/machines/sale", route_machine_sale,
+     "Machine Sale", "售货机销售出库，支持现金/扫码", "Machine", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/machines/sales", route_machine_sales_list,
+     "Machine Sales List", "查询售货机销售记录", "Machine", 1, 0, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/downtime/start", route_downtime_start,
+     "Start Downtime", "开始停机记录", "Downtime", 1, 1, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/downtime/end", route_downtime_end,
+     "End Downtime", "结束停机并计算损失", "Downtime", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/downtime", route_downtime_list,
+     "List Downtime", "查询停机记录", "Downtime", 1, 0, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/replenishment/generate", route_replenishment_generate,
+     "Generate Replenishment Route", "生成补货路线，按优先级排序", "Replenishment", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/replenishment", route_replenishment_list,
+     "List Replenishment Routes", "查询补货路线，支持明细查询", "Replenishment", 1, 0, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/replenishment/complete", route_replenishment_complete_item,
+     "Complete Replenishment Item", "完成补货路线单项", "Replenishment", 1, 1, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/daily-report/generate", route_daily_report_generate,
+     "Generate Daily Report", "生成日报表", "Report", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/daily-report", route_daily_report_list,
+     "List Daily Reports", "查询日报表", "Report", 1, 0, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/daily-report/reconcile", route_daily_report_reconcile,
+     "Reconcile Daily Report", "日报对账（管理员）", "Report", 1, 1, 1},
+    {MHD_HTTP_METHOD_POST, "/api/v1/shift-reconcile", route_shift_reconcile,
+     "Shift Reconcile", "收班对账，核对现金/扫码/异常差额", "Report", 1, 1, 1},
+    {MHD_HTTP_METHOD_GET, "/api/v1/shift-reconciliations", route_shift_reconciliation_list,
+     "List Shift Reconciliations", "查询收班对账记录", "Report", 1, 0, 1},
 };
 
 static const size_t g_api_routes_count =

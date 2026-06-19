@@ -3,6 +3,20 @@ build/
 *.out
 *.log
 .DS_Store
+
+# Local environment
+.env
+.env.local
+
+# CMake / build metadata
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# Local runtime data and secrets
+data/user_key.b64
 data/*.db
 data/*.db-shm
 data/*.db-wal
