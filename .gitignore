@@ -15,6 +15,12 @@ cmake_install.cmake
 compile_commands.json
 Makefile
 
+# Editor metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+
 # Local runtime data and secrets
 data/user_key.b64
 data/*.db

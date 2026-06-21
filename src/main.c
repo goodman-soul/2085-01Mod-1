@@ -432,6 +432,7 @@ static int db_init(void) {
         "  reason TEXT NOT NULL,"
         "  estimated_loss_cents INTEGER NOT NULL DEFAULT 0,"
         "  resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0,1)),"
+        "  note TEXT,"
         "  resolution_note TEXT,"
         "  operator_user_id INTEGER,"
         "  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
@@ -564,6 +565,10 @@ static int db_init(void) {
 
     if (db_exec(schema_sql) != 0) {
         return -1;
+    }
+
+    if (db_exec("ALTER TABLE machine_downtime ADD COLUMN note TEXT;") != 0) {
+        sqlite3_exec(g_db, "COMMIT;", NULL, NULL, NULL);
     }
 
     return 0;
@@ -1936,7 +1941,7 @@ static enum MHD_Result handle_create_machine(struct MHD_Connection *connection,
     }
 
     const char *status = optional_string_field(body, "status", 16);
-    if (status == NULL) { status = "online"; }
+    if (status == NULL || *status == '\0') { status = "online"; }
     if (strcmp(status, "online") != 0 && strcmp(status, "offline") != 0 &&
         strcmp(status, "downtime") != 0) {
         json_decref(body);
@@ -2561,6 +2566,79 @@ static enum MHD_Result handle_machine_stock_add(struct MHD_Connection *connectio
     }
     product_id = sqlite3_column_int(stmt, 0);
     sqlite3_finalize(stmt);
+
+    int warehouse_stock = 0;
+    const char *find_warehouse =
+        "SELECT stock_quantity FROM products WHERE id = ? LIMIT 1;";
+    if (sqlite3_prepare_v2(g_db, find_warehouse, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "查询总仓库存失败");
+    }
+    sqlite3_bind_int(stmt, 1, product_id);
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        warehouse_stock = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (warehouse_stock < quantity) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_CONFLICT, "INSUFFICIENT_STOCK",
+                            "总仓库存不足");
+    }
+
+    const char *upd_warehouse =
+        "UPDATE products SET stock_quantity = stock_quantity - ?, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?;";
+    if (sqlite3_prepare_v2(g_db, upd_warehouse, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "扣减总仓库存失败");
+    }
+    sqlite3_bind_int(stmt, 1, quantity);
+    sqlite3_bind_int(stmt, 2, product_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "扣减总仓库存失败");
+    }
+
+    const char *ins_movement =
+        "INSERT INTO stock_movements "
+        "(product_id, movement_type, quantity, unit_price_cents, note, "
+        "operator_user_id) "
+        "VALUES (?, 'OUT', ?, 0, ?, ?);";
+    if (sqlite3_prepare_v2(g_db, ins_movement, -1, &stmt, NULL) != SQLITE_OK) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "写入库存流水失败");
+    }
+    sqlite3_bind_int(stmt, 1, product_id);
+    sqlite3_bind_int(stmt, 2, quantity);
+    sqlite3_bind_text(stmt, 3, note_copy, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 4, user.user_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        rollback_transaction();
+        pthread_mutex_unlock(&g_db_mutex);
+        json_decref(body);
+        return respond_error(connection, MHD_HTTP_INTERNAL_SERVER_ERROR,
+                            "DB_ERROR", "写入库存流水失败");
+    }
 
     int current_stock = 0;
     int existing_id = 0;
@@ -3934,7 +4012,7 @@ static enum MHD_Result handle_replenishment_complete_item(struct MHD_Connection 
     }
 
     const char *status = optional_string_field(body, "status", 16);
-    if (status == NULL) { status = "completed"; }
+    if (status == NULL || *status == '\0') { status = "completed"; }
     if (strcmp(status, "completed") != 0 && strcmp(status, "skipped") != 0) {
         json_decref(body);
         return respond_error(connection, MHD_HTTP_BAD_REQUEST, "INVALID_INPUT",
